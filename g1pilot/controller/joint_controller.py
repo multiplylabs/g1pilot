@@ -135,7 +135,7 @@ class JointController(Node, QtWidgets.QWidget):
         self._initial_js_done = False
 
         self.using_robot = self.declare_parameter("use_robot", True).get_parameter_value().bool_value
-        iface = self.declare_parameter("interface", "eth1").get_parameter_value().string_value
+        iface = self.declare_parameter("interface", "eth0").get_parameter_value().string_value
         self.init_timeout_ms = self.declare_parameter("init_timeout_ms", 500).get_parameter_value().integer_value
 
         if self.using_robot:

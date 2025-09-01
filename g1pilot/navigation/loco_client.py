@@ -42,11 +42,11 @@ class G1LocoClient(Node):
         self.control_arms = False
         self.ui_bridge = ui_bridge
 
-        self.declare_parameter('interface', 'eth1')
+        self.declare_parameter('interface', 'eth0')
         interface = self.get_parameter('interface').get_parameter_value().string_value
         self.declare_parameter('arm_controlled', 'both') # Options: 'left', 'right', 'both'
         self.arm_controlled = self.get_parameter('arm_controlled').get_parameter_value().string_value
-        self.declare_parameter('enable_arm_ui', False)
+        self.declare_parameter('enable_arm_ui', True)
         self.enable_arm_ui = self.get_parameter('enable_arm_ui').get_parameter_value().bool_value
 
         self.declare_parameter('ik_use_waist', False)
@@ -61,7 +61,7 @@ class G1LocoClient(Node):
 
         ChannelFactoryInitialize(0, interface)
         self.robot = LocoClient()
-        self.robot.SetTimeout(0.0001)
+        self.robot.SetTimeout(10.0)
         self.robot.SetFsmId(4)
         self.robot.Init()
         self.robot.Damp()

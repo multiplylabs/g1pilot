@@ -28,7 +28,7 @@ def _fsm_mode(client: LocoClient) -> Optional[int]:
     return _rpc_get_int(client, ROBOT_API_ID_LOCO_GET_FSM_MODE)
 
 def hanger_boot_sequence(
-    iface: str = "eth1",
+    iface: str = "eth0",
     step: float = 0.02,
     max_height: float = 0.5,
     logger: Optional[logging.Logger] = None,
@@ -91,5 +91,5 @@ def hanger_boot_sequence(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    bot = hanger_boot_sequence(iface="eth1")
+    bot = hanger_boot_sequence(iface="eth0")
     print(f"Robot is now in FSM {bot.GetFsmId()} (mode {_fsm_mode(bot)})")

@@ -9,7 +9,7 @@ def generate_launch_description():
             name='joint_controller',
             parameters=[
                 {
-                    'interface': 'eth1',
+                    'interface': 'eth0',
                     'use_robot': True,
                 }],
             output='screen'
@@ -19,7 +19,7 @@ def generate_launch_description():
             package='g1pilot',
             executable='cartesian_controller',
             name='cartesian_controller',
-            parameters=[{'interface': 'eth1'}],
+            parameters=[{'interface': 'eth0'}],
             output='screen'
         ),
     ])
