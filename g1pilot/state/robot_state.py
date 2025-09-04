@@ -18,17 +18,22 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
 
+def quaternion_inverse(q):
+    """Inverse of a quaternion [w,x,y,z]."""
+    w, x, y, z = q
+    norm = w*w + x*x + y*y + z*z
+    return [w/norm, -x/norm, -y/norm, -z/norm]
+
 def quaternion_multiply(q1, q2):
-    """Multiplies two quaternions (w,x,y,z)."""
+    """Multiply two quaternions [w,x,y,z]."""
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
     return [
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
     ]
-
 
 class G1JointIndex:
     LeftHipPitch     = 0
@@ -116,6 +121,7 @@ class RobotState(Node):
         self.motor_state_pub = self.create_publisher(MotorStateList, f"{self.ns}/motor_state", qos_profile)
 
         self.initial_odometry = None
+        self.initial_quat = None
 
         # TF broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -147,27 +153,36 @@ class RobotState(Node):
         odom.header.frame_id = frame_id
         odom.child_frame_id = child_frame_id
 
+        q = [
+            float(est.imu_state.quaternion[0]),  # w
+            float(est.imu_state.quaternion[1]),  # x
+            float(est.imu_state.quaternion[2]),  # y
+            float(est.imu_state.quaternion[3])   # z
+        ]
+
         # Pose
         if self.initial_odometry is None:
             self.initial_odometry = [
                 float(est.position[0]),
                 float(est.position[1]),
                 float(est.position[2]),
-
             ]
+
+        if self.initial_quat is None:
+            # Guardamos cuaternion inicial para fijar heading al frente
+            self.initial_quat = q
+
+        q_rel = quaternion_multiply(q, quaternion_inverse(self.initial_quat))
+
         odom.pose.pose.position.x = float(est.position[0]) - self.initial_odometry[0]
         odom.pose.pose.position.y = float(est.position[1]) - self.initial_odometry[1]
         odom.pose.pose.position.z = float(est.position[2])
 
         # Unitree quaternion is [w,x,y,z] -> ROS is x,y,z,w
-        qw = float(est.imu_state.quaternion[0])
-        qx = float(est.imu_state.quaternion[1])
-        qy = float(est.imu_state.quaternion[2])
-        qz = float(est.imu_state.quaternion[3])
-        odom.pose.pose.orientation.x = qx
-        odom.pose.pose.orientation.y = qy
-        odom.pose.pose.orientation.z = qz
-        odom.pose.pose.orientation.w = qw
+        odom.pose.pose.orientation.x = q_rel[1]
+        odom.pose.pose.orientation.y = q_rel[2]
+        odom.pose.pose.orientation.z = q_rel[3]
+        odom.pose.pose.orientation.w = q_rel[0]
 
         # Pose covariance (36 floats)
         pose_cov = [0.0] * 36

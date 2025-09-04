@@ -22,9 +22,9 @@ class DummyMapPublisher(Node):
         self.ox = -(self.w*self.res)/2.0
         self.oy = -(self.h*self.res)/2.0
 
-        self.add_obstacle(2.0, 1.75, 1.2, 0.2)
-        self.add_obstacle(2.0, 0.25, 1.2, 0.2)
-        self.add_obstacle(1.0, 1.0, 0.2, 1.5)   
+        # self.add_obstacle(2.0, 1.75, 1.2, 0.2)
+        # self.add_obstacle(2.0, 0.25, 1.2, 0.2)
+        # self.add_obstacle(0.8, 1.0, 0.2, 1.5)   
 
     def world_to_grid(self, x, y):
         ix = int((x - self.ox)/self.res)

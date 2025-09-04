@@ -57,25 +57,12 @@ RUN apt install -y python3-gi gstreamer1.0-tools \
   gstreamer1.0-plugins-* gstreamer1.0-libav
 
 RUN pip install --upgrade pyrealsense2 numpy opencv-python
-WORKDIR /
-RUN git clone https://github.com/IntelRealSense/librealsense.git
-WORKDIR /librealsense
-RUN apt install v4l-utils -y
-RUN ./scripts/setup_udev_rules.sh
-RUN mkdir build && cd build && \
-    cmake ../ -DBUILD_EXAMPLES=true -DCMAKE_BUILD_TYPE=Release && \
-    make -j4 && make install
-    
-WORKDIR /ros2_ws/src
-RUN git clone https://github.com/IntelRealSense/realsense-ros.git -b ros2-master
-
-RUN apt-get install ros-${ROS_DISTRO}-cv-bridge ros-${ROS_DISTRO}-diagnostic-updater -y
 
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc && \
     echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
 
 RUN echo "export LD_LIBRARY_PATH=/usr/local/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc
 
-RUN echo "export ROS_DOMAIN_ID=1" >> ~/.bashrc
+RUN echo "export ROS_DOMAIN_ID=1" >> /root/.bashrc
 
 CMD ["bash"]
