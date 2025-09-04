@@ -42,7 +42,7 @@ class G1LocoClient(Node):
         self.control_arms = False
         self.ui_bridge = ui_bridge
 
-        self.declare_parameter('interface', 'eth0')
+        self.declare_parameter('interface', 'wlp2s0f0')
         interface = self.get_parameter('interface').get_parameter_value().string_value
         self.declare_parameter('arm_controlled', 'both') # Options: 'left', 'right', 'both'
         self.arm_controlled = self.get_parameter('arm_controlled').get_parameter_value().string_value

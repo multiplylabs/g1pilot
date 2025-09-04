@@ -7,7 +7,6 @@ def generate_launch_description():
             package='g1pilot',
             executable='joystick',
             name='joystick',
-            parameters=[{'interface': 'eth0'}],
             output='screen'
         ),
 
@@ -15,7 +14,6 @@ def generate_launch_description():
             package='g1pilot',
             executable='joy_mux',
             name='joy_mux',
-            parameters=[{'interface': 'eth0'}],
             output='screen'
         ),
 
