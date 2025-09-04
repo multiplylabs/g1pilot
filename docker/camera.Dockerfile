@@ -53,4 +53,12 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc && \
 
 RUN echo "export LD_LIBRARY_PATH=/usr/local/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc
 
+RUN sysctl net.ipv4.ipfrag_time=3
+RUN sysctl net.ipv4.ipfrag_high_thresh=134217728
+
+RUN echo "export FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA?max_msg_size=1MB&soets_size=1MB&non_blocking=true&tcp_negotiation_timeout=50" >> ~/.bashrc
+
+RUN echo "export ROS_DOMAIN_ID=1" >> ~/.bashrc
+
+
 CMD ["bash"]

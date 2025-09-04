@@ -42,6 +42,30 @@ def generate_launch_description():
             ]
         ),
 
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='world_to_odom_tf',
+            arguments=[
+                '0', '0', '0',
+                '0', '0', '0',
+                'odom',
+                'world'
+            ]
+        ),
+
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='mrbeam_to_pelvis_tf',
+            arguments=[
+                '0.0745', '0.0', '0.065',
+                '0', '0.05236', '0',
+                'waist_roll_link',
+                'mrbeam_link'
+            ]
+        ),
+
         DeclareLaunchArgument(
                 "use_sim_time",
                 default_value="false",

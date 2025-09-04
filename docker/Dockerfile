@@ -76,4 +76,6 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc && \
 
 RUN echo "export LD_LIBRARY_PATH=/usr/local/lib:\$LD_LIBRARY_PATH" >> /root/.bashrc
 
+RUN echo "export ROS_DOMAIN_ID=1" >> ~/.bashrc
+
 CMD ["bash"]
