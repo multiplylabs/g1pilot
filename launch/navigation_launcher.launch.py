@@ -7,7 +7,18 @@ def generate_launch_description():
             package='g1pilot',
             executable='loco_client',
             name='loco_client',
-            parameters=[{'interface': 'eth0'}],
+            parameters=[
+                {
+                    'interface': 'eth0',
+                    'use_robot': False,
+                    'arm_controlled': 'both',
+                    'enable_arm_ui': True,
+                    'ik_use_waist': True,
+                    'ik_alpha': 0.2,
+                    'ik_max_dq_step': 0.05,
+                    'arm_velocity_limit': 2.0,
+                }
+            ],
             output='screen'
         ),
 

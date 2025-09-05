@@ -72,17 +72,6 @@ sh run.sh
 ## 🧠 Nodes Overview
 
 **G1Pilot** provides multiple ROS2 nodes to control and monitor the Unitree G1 robot.  
-
-### 1️⃣ Cartesian Controller (`cartesian_controller`)  
-- 🎯 **Purpose:** Controls the **right arm end-effector** of the robot.  
-- 🔄 **Behavior:** Sends high-level Cartesian commands that are converted into joint movements via the **Joint Controller**.  
-- 🛠️ **Use case:** Ideal for precise end-effector manipulation in Cartesian space.  
-
-### 2️⃣ Joint Controller (`joint_controller`)  
-- 🎯 **Purpose:** Directly controls the robot’s individual joints.  
-- 🔄 **Behavior:** Receives low-level joint commands and sends them to the robot hardware for execution.  
-- 🛠️ **Use case:** Required for fine-grained motion control and as a backend for Cartesian control.  
-
 ### 3️⃣ Interactive Marker (`interactive_marker`)  
 - 🎯 **Purpose:** Publishes a **movable marker in RViz** to interactively control the robot’s end-effector.  
 - 🛠️ **Use case:** Intuitive GUI control of the robot without manual command-line inputs.  
@@ -100,7 +89,6 @@ sh run.sh
 
 ### 6️⃣ Joystick (`joystick`)  
 - 🎯 **Purpose:** Integrates a **game controller (joystick)** to manually control the robot.  
-- 🛠️ **Use case:** Remote teleoperation for research or demonstrations.  
 
 #### **Basic Controls**
 - **L1** → Emergency Stop → The robot enters **Damp Mode** (safe state).
@@ -108,6 +96,8 @@ sh run.sh
 - **R1** → Activates **Balance Mode**.
 - **Left Joystick** → Controls **linear movements** (forward, backward, sideways).
 - **Right Joystick** → Controls **angular rotation** (turning).
+- **Triangle (Toggle)** → Enables/Disables goal navigation mode.
+- **X (Toggle)** → Enables/Disables arm control mode.
 
 ## Usage
 Once you have the docker image running, you can run the following command to start the unitree node:
@@ -125,12 +115,7 @@ To visualize the real robot in RViz, you can run the following command:
 
 ```bash
 ros2 launch g1pilot robot_state_launcher.launch.py
-```
-
-To control the robot, using the joint controller or the cartesian controller, you can run the following command:
-```bash
-ros2 launch g1pilot controller_launcher.launch.py
-```
+```s
 
 To teleoperate the robot using the joystick, you can run the following command:
 ```bash

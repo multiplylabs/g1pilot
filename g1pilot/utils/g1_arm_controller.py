@@ -10,8 +10,10 @@ from enum import IntEnum
 from PyQt5 import QtWidgets, QtCore
 
 import rclpy
+from rclpy.node import Node
 from rclpy.time import Time
 from rclpy.duration import Duration
+from rclpy.qos import QoSProfile
 
 # TF2
 try:
@@ -26,6 +28,12 @@ try:
 except Exception:
     PoseStamped = None
 
+from sensor_msgs.msg import JointState
+import pinocchio as pin
+from pinocchio import SE3
+from ament_index_python.packages import get_package_share_directory
+
+# Unitree SDK (solo se usa si use_robot=True)
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import (LowCmd_ as hg_LowCmd, LowState_ as hg_LowState)
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
@@ -126,6 +134,19 @@ class G1_29_JointIndex(IntEnum):
     kNotUsedJoint4 = 33
     kNotUsedJoint5 = 34
 
+
+# Nombres ROS para publicar /joint_states
+JOINT_NAMES_ROS = {
+    0: "left_hip_pitch_joint",   1: "left_hip_roll_joint",    2: "left_hip_yaw_joint",
+    3: "left_knee_joint",        4: "left_ankle_pitch_joint", 5: "left_ankle_roll_joint",
+    6: "right_hip_pitch_joint",  7: "right_hip_roll_joint",   8: "right_hip_yaw_joint",
+    9: "right_knee_joint",      10: "right_ankle_pitch_joint",11:"right_ankle_roll_joint",
+    12:"waist_yaw_joint",       13: "waist_roll_joint",      14:"waist_pitch_joint",
+    15:"left_shoulder_pitch_joint", 16:"left_shoulder_roll_joint", 17:"left_shoulder_yaw_joint",
+    18:"left_elbow_joint", 19:"left_wrist_roll_joint", 20:"left_wrist_pitch_joint", 21:"left_wrist_yaw_joint",
+    22:"right_shoulder_pitch_joint",23:"right_shoulder_roll_joint",24:"right_shoulder_yaw_joint",
+    25:"right_elbow_joint",26:"right_wrist_roll_joint",27:"right_wrist_pitch_joint",28:"right_wrist_yaw_joint",
+}
 
 JOINT_LIMITS_RAD = {
     0: (-2.5307,  2.8798),
@@ -361,10 +382,35 @@ class ArmGUI(QtWidgets.QWidget):
             self.value_labels[i].setText(f"{deg:>4}°")
             self.sliders[i].blockSignals(False)
 
+
+class DataBuffer:
+    def __init__(self):
+        self.data = None
+        self.lock = threading.Lock()
+    def GetData(self):
+        with self.lock:
+            return self.data
+    def SetData(self, data):
+        with self.lock:
+            self.data = data
+
+
 class G1_29_ArmController:
     def __init__(self, ui_bridge: QtCore.QObject, controlled_arms: str = 'right',
-                 show_ui: bool = True, ros_node=None, urdf_path=None, mesh_dir=None):
+                 show_ui: bool = True, ros_node: Node = None, ik_use_waist: bool = False,
+                 ik_alpha: float = 0.2, ik_max_dq_step: float = 0.05, arm_velocity_limit: float = 2.0,
+                 urdf_path: str = None, mesh_dir: str = None,):
         self.motor_state = [MotorState() for _ in range(35)]
+
+        self._ros_node = ros_node
+        self._joint_pub = None
+        self.use_robot = True
+        if self._ros_node is not None:
+            if not self._ros_node.has_parameter('use_robot'):
+                self._ros_node.declare_parameter('use_robot', True)
+            self.use_robot = bool(self._ros_node.get_parameter('use_robot').value)
+            qos = QoSProfile(depth=10)
+            self._joint_pub = self._ros_node.create_publisher(JointState, "/joint_states", qos)
 
         self.topic_motion_cmd = 'rt/arm_sdk'
         self.topic_low_cmd    = 'rt/lowstate'
@@ -379,12 +425,11 @@ class G1_29_ArmController:
         self.show_ui = bool(show_ui)
 
         self.all_motor_q = None
-        self.arm_velocity_limit = 2.0
+        self.arm_velocity_limit = float(arm_velocity_limit)
         self.control_dt = 1.0 / 250.0
 
         self._last_cmd_q = None
         self._last_tick_time = None
-
         self._speed_gradual_max = False
 
         self._bridge = ui_bridge
@@ -402,49 +447,51 @@ class G1_29_ArmController:
             "both":  "G1 – Both Arms Control",
         }[self.controlled_arms]
 
-        self.lowstate_subscriber = ChannelSubscriber(self.topic_low_cmd, hg_LowState)
-        self.lowstate_subscriber.Init()
+        self.sim_current_q_all = np.zeros(29, dtype=float)
+
         self.lowstate_buffer = DataBuffer()
+        if self.use_robot:
+            self.lowstate_subscriber = ChannelSubscriber(self.topic_low_cmd, hg_LowState)
+            self.lowstate_subscriber.Init()
+            self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state, daemon=True)
+            self.subscribe_thread.start()
 
-        self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state, daemon=True)
-        self.subscribe_thread.start()
+            self.lowcmd_publisher = ChannelPublisher(self.topic_motion_cmd, hg_LowCmd)
+            self.lowcmd_publisher.Init()
 
-        self.lowcmd_publisher = ChannelPublisher(self.topic_motion_cmd, hg_LowCmd)
-        self.lowcmd_publisher.Init()
+            print("Waiting for first lowstate message...")
+            while not self.lowstate_buffer.GetData():
+                time.sleep(0.1)
 
-        print("Waiting for first lowstate message...")
-        while not self.lowstate_buffer.GetData():
-            time.sleep(0.1)
+            self.crc = CRC()
+            self.msg = unitree_hg_msg_dds__LowCmd_()
+            self.msg.mode_pr = 0
+            self.msg.mode_machine = self.get_mode_machine()
+            self.all_motor_q = self.get_current_motor_q()
 
-        print("G1_29_ArmController initialized.")
-        self.crc = CRC()
-        self.msg = unitree_hg_msg_dds__LowCmd_()
-        self.msg.mode_pr = 0
-        self.msg.mode_machine = self.get_mode_machine()
-        self.all_motor_q = self.get_current_motor_q()
-
-        wrist_vals = {m.value for m in G1_29_JointWristIndex}
-        for jid in G1_29_JointArmIndex:
-            self.msg.motor_cmd[jid].mode = 1
-            if jid.value in wrist_vals:
-                self.msg.motor_cmd[jid].kp = self.kp_wrist
-                self.msg.motor_cmd[jid].kd = self.kd_wrist
-            else:
-                self.msg.motor_cmd[jid].kp = self.kp_low
-                self.msg.motor_cmd[jid].kd = self.kd_low
-            self.msg.motor_cmd[jid].q = float(self.all_motor_q[jid.value])
+            wrist_vals = {m.value for m in G1_29_JointWristIndex}
+            for jid in G1_29_JointArmIndex:
+                self.msg.motor_cmd[jid].mode = 1
+                if jid.value in wrist_vals:
+                    self.msg.motor_cmd[jid].kp = self.kp_wrist
+                    self.msg.motor_cmd[jid].kd = self.kd_wrist
+                else:
+                    self.msg.motor_cmd[jid].kp = self.kp_low
+                    self.msg.motor_cmd[jid].kd = self.kd_low
+                self.msg.motor_cmd[jid].q = float(self.all_motor_q[jid.value])
+        else:
+            self.all_motor_q = self.sim_current_q_all.copy()
 
         self.ctrl_lock = threading.Lock()
 
-        # === IK params ===
         self._ik_enabled = True
-        self._ik_alpha = 0.2
-        self._ik_max_dq_step = 0.05
+        self._ik_alpha = float(ik_alpha)
+        self._ik_max_dq_step = float(ik_max_dq_step)
         self._ik_damping = 1e-6
         self._ik_max_iter = 60
         self._ik_tol = 1e-4
 
-        self._ik_use_waist = False
+        self._ik_use_waist = bool(ik_use_waist)
         self._ik_track_orientation = False
         self._ik_pos_gain = 1.0
         self._ik_ori_gain = 0.2
@@ -457,7 +504,6 @@ class G1_29_ArmController:
         self._ik_q_prev_full = None
         self._log_ik_active = False
 
-        self._ros_node = ros_node
         self._ik_world_frame = 'odom'
         self._tf_buffer = None
         self._tf_listener = None
@@ -514,24 +560,13 @@ class G1_29_ArmController:
                 except Exception as e:
                     print(f"[IK] No pude iniciar TF2: {e}", flush=True)
 
-        self._left_arm_names = [
-            "left_shoulder_pitch_joint","left_shoulder_roll_joint","left_shoulder_yaw_joint",
-            "left_elbow_joint","left_wrist_roll_joint","left_wrist_pitch_joint","left_wrist_yaw_joint",
-        ]
-        self._right_arm_names = [
-            "right_shoulder_pitch_joint","right_shoulder_roll_joint","right_shoulder_yaw_joint",
-            "right_elbow_joint","right_wrist_roll_joint","right_wrist_pitch_joint","right_wrist_yaw_joint",
-        ]
-
+        # IK/URDF
         try:
-            import pinocchio as pin
-            from pinocchio import SE3
             self.pin = pin
             self.SE3 = SE3
 
             if urdf_path is None or mesh_dir is None:
                 try:
-                    from ament_index_python.packages import get_package_share_directory
                     pkg_share = get_package_share_directory('g1pilot')
                     urdf_path = urdf_path or os.path.join(pkg_share, 'description_files', 'urdf', 'g1_29dof.urdf')
                     mesh_dir  = mesh_dir  or os.path.join(pkg_share, 'description_files', 'meshes')
@@ -542,17 +577,7 @@ class G1_29_ArmController:
                 self.model, _, _ = self.pin.buildModelsFromUrdf(urdf_path, package_dirs=[mesh_dir] if mesh_dir else [])
                 self.data = self.pin.Data(self.model)
 
-                _joint_index_to_ros_name = {
-                    0: "left_hip_pitch_joint",   1: "left_hip_roll_joint",    2: "left_hip_yaw_joint",
-                    3: "left_knee_joint",        4: "left_ankle_pitch_joint", 5: "left_ankle_roll_joint",
-                    6: "right_hip_pitch_joint",  7: "right_hip_roll_joint",   8: "right_hip_yaw_joint",
-                    9: "right_knee_joint",      10: "right_ankle_pitch_joint",11: "right_ankle_roll_joint",
-                    12:"waist_yaw_joint",       13: "waist_roll_joint",      14: "waist_pitch_joint",
-                    15:"left_shoulder_pitch_joint", 16:"left_shoulder_roll_joint", 17:"left_shoulder_yaw_joint",
-                    18:"left_elbow_joint", 19:"left_wrist_roll_joint", 20:"left_wrist_pitch_joint", 21:"left_wrist_yaw_joint",
-                    22:"right_shoulder_pitch_joint",23:"right_shoulder_roll_joint",24:"right_shoulder_yaw_joint",
-                    25:"right_elbow_joint",26:"right_wrist_roll_joint",27:"right_wrist_pitch_joint",28:"right_wrist_yaw_joint",
-                }
+                _joint_index_to_ros_name = JOINT_NAMES_ROS
                 self._ros_joint_names = [_joint_index_to_ros_name[i] for i in range(29)]
                 self._name_to_q_index = {}
                 self._name_to_v_index = {}
@@ -573,7 +598,7 @@ class G1_29_ArmController:
                 self._ros_to_g1_index = {v: k for k, v in _joint_index_to_ros_name.items()}
 
                 def _mk_static_T(xyz, rpy_deg):
-                    rpy = np.radians(rpy_deg.astype(float))
+                    rpy = np.radians(np.array(rpy_deg, dtype=float))
                     R = self.pin.rpy.rpyToMatrix(rpy[0], rpy[1], rpy[2])
                     return self.SE3(R, np.array(xyz, dtype=float))
                 self._T_off_right_static = _mk_static_T(self._ee_off_right_xyz, self._ee_off_right_rpy_deg)
@@ -654,22 +679,32 @@ class G1_29_ArmController:
                 self.tauff_target = np.zeros_like(self.tauff_target)
                 self._last_cmd_q = cur14.copy()
                 self._ik_q_prev_14 = cur14.copy()
-            self._arm_set_mode(mode=1)
+            if self.use_robot:
+                self._arm_set_mode(mode=1)
             self._open_gui_if_needed()
         else:
             self._close_gui_if_needed()
 
     def get_mode_machine(self):
-        msg = self.lowstate_buffer.GetData()
-        return getattr(msg, "mode_machine", 0) if msg is not None else 0
+        if self.use_robot:
+            msg = self.lowstate_buffer.GetData()
+            return getattr(msg, "mode_machine", 0) if msg is not None else 0
+        return 0
 
     def get_current_dual_arm_q(self):
-        msg = self.lowstate_buffer.GetData()
-        return np.array([msg.motor_state[id].q for id in G1_29_JointArmIndex], dtype=float)
+        if self.use_robot:
+            msg = self.lowstate_buffer.GetData()
+            return np.array([msg.motor_state[id].q for id in G1_29_JointArmIndex], dtype=float)
+
+        left = [self.sim_current_q_all[j] for j in LEFT_JOINT_INDICES_LIST]
+        right= [self.sim_current_q_all[j] for j in RIGHT_JOINT_INDICES_LIST]
+        return np.array(left + right, dtype=float)
 
     def get_current_motor_q(self):
-        msg = self.lowstate_buffer.GetData()
-        return np.array([msg.motor_state[id].q for id in G1_29_JointIndex], dtype=float)
+        if self.use_robot:
+            msg = self.lowstate_buffer.GetData()
+            return np.array([msg.motor_state[id].q for id in G1_29_JointIndex], dtype=float)
+        return self.sim_current_q_all.copy()
 
     def _compute_dt(self):
         now = time.time()
@@ -692,6 +727,8 @@ class G1_29_ArmController:
         return last + delta
 
     def _hold_non_arm_joints(self):
+        if not self.use_robot:
+            return
         arm_vals  = {m.value for m in G1_29_JointArmIndex}
         weak_vals = {m.value for m in G1_29_JointWeakIndex}
         current_all = self.get_current_motor_q()
@@ -714,28 +751,18 @@ class G1_29_ArmController:
     def _arm_set_mode(self, mode:int, kp:float=0.0, kd:float=0.0):
         wrist_vals = {m.value for m in G1_29_JointWristIndex}
         for jid in G1_29_JointArmIndex:
-            self.msg.motor_cmd[jid].mode = mode
-            if mode == 1:
-                if jid.value in wrist_vals:
-                    self.msg.motor_cmd[jid].kp = self.kp_wrist
-                    self.msg.motor_cmd[jid].kd = self.kp_wrist if False else self.kd_wrist
+            if self.use_robot:
+                self.msg.motor_cmd[jid].mode = mode
+                if mode == 1:
+                    if jid.value in wrist_vals:
+                        self.msg.motor_cmd[jid].kp = self.kp_wrist
+                        self.msg.motor_cmd[jid].kd = self.kd_wrist
+                    else:
+                        self.msg.motor_cmd[jid].kp = self.kp_low
+                        self.msg.motor_cmd[jid].kd = self.kd_low
                 else:
-                    self.msg.motor_cmd[jid].kp = self.kp_low
-                    self.msg.motor_cmd[jid].kd = self.kd_low
-            else:
-                self.msg.motor_cmd[jid].kp = kp
-                self.msg.motor_cmd[jid].kd = kd
-
-    def _arm_release_once(self):
-        current = self.get_current_dual_arm_q()
-        for idx, jid in enumerate(G1_29_JointArmIndex):
-            self.msg.motor_cmd[jid].q   = float(current[idx])
-            self.msg.motor_cmd[jid].dq  = 0.0
-            self.msg.motor_cmd[jid].tau = 0.0
-        self._arm_set_mode(mode=0, kp=0.0, kd=0.0)
-        self.msg.mode_machine = self.get_mode_machine()
-        self.msg.crc = self.crc.Crc(self.msg)
-        self.lowcmd_publisher.Write(self.msg)
+                    self.msg.motor_cmd[jid].kp = kp
+                    self.msg.motor_cmd[jid].kd = kd
 
     def _transform_pose_to_world(self, ps):
         if (self._ros_node is None) or (self._tf_buffer is None) or (not hasattr(ps, "header")):
@@ -752,10 +779,6 @@ class G1_29_ArmController:
             return ps
 
     def _fk_current_ee(self, side):
-        try:
-            import pinocchio as pin
-        except Exception:
-            return None
         q = self.pin.neutral(self.model)
         cur_all = self.get_current_motor_q()
         for jid_idx, ros_name in enumerate(self._ros_joint_names):
@@ -825,9 +848,15 @@ class G1_29_ArmController:
         if self._ik_use_waist:
             wanted.update(["waist_yaw_joint", "waist_roll_joint", "waist_pitch_joint"])
         if side == 'right':
-            wanted.update(self._right_arm_names)
+            wanted.update([
+                "right_shoulder_pitch_joint","right_shoulder_roll_joint","right_shoulder_yaw_joint",
+                "right_elbow_joint","right_wrist_roll_joint","right_wrist_pitch_joint","right_wrist_yaw_joint",
+            ])
         else:
-            wanted.update(self._left_arm_names)
+            wanted.update([
+                "left_shoulder_pitch_joint","left_shoulder_roll_joint","left_shoulder_yaw_joint",
+                "left_elbow_joint","left_wrist_roll_joint","left_wrist_pitch_joint","left_wrist_yaw_joint",
+            ])
         out = []
         for nm in self._ordered_1d_names():
             if nm in wanted:
@@ -841,11 +870,17 @@ class G1_29_ArmController:
         if side == 'right':
             fid = self._fid_right
             arm_ids = RIGHT_JOINT_INDICES_LIST
-            arm_names = self._right_arm_names
+            arm_names = [
+                "right_shoulder_pitch_joint","right_shoulder_roll_joint","right_shoulder_yaw_joint",
+                "right_elbow_joint","right_wrist_roll_joint","right_wrist_pitch_joint","right_wrist_yaw_joint",
+            ]
         else:
             fid = self._fid_left
             arm_ids = LEFT_JOINT_INDICES_LIST
-            arm_names = self._left_arm_names
+            arm_names = [
+                "left_shoulder_pitch_joint","left_shoulder_roll_joint","left_shoulder_yaw_joint",
+                "left_elbow_joint","left_wrist_roll_joint","left_wrist_pitch_joint","left_wrist_yaw_joint",
+            ]
         if fid is None:
             return None
 
@@ -964,12 +999,16 @@ class G1_29_ArmController:
         return q_smooth
 
     def _ctrl_motor_state(self):
+        all_joint_names = [JOINT_NAMES_ROS[i] for i in sorted(JOINT_NAMES_ROS.keys())]
+
         while True:
             if self.control_mode:
                 start = time.time()
                 with self.ctrl_lock:
                     arm_q_target     = self.q_target.copy()
                     arm_tauff_target = self.tauff_target.copy()
+
+                # IK activa
                 if self._ik_have_joint_map and self._ik_enabled and (self._ik_goal_left is not None or self._ik_goal_right is not None):
                     if not hasattr(self, "_log_ik_active"):
                         print("[IK] Activated: Using IK to update q_target", flush=True)
@@ -977,31 +1016,41 @@ class G1_29_ArmController:
                     arm_q_target = self._ik_update_q_target(arm_q_target)
 
                 cliped = self.clip_arm_q_target(arm_q_target, velocity_limit=self.arm_velocity_limit)
-
-                self.msg.mode_machine = self.get_mode_machine()
-                self.msg.mode_pr = 1
-
-                try:
-                    self.msg.motor_cmd[G1_29_JointIndex.kNotUsedJoint0].q = 1.0
-                except Exception:
-                    pass
-
-                for idx, jid in enumerate(G1_29_JointArmIndex):
-                    self.msg.motor_cmd[jid].mode = 1
-                    self.msg.motor_cmd[jid].q   = float(cliped[idx])
-                    self.msg.motor_cmd[jid].dq  = 0.0
-                    self.msg.motor_cmd[jid].tau = float(arm_tauff_target[idx])
-                    if jid.value in {m.value for m in G1_29_JointWristIndex}:
-                        self.msg.motor_cmd[jid].kp = self.kp_wrist
-                        self.msg.motor_cmd[jid].kd = self.kd_wrist
-                    else:
-                        self.msg.motor_cmd[jid].kp = self.kp_low
-                        self.msg.motor_cmd[jid].kd = self.kd_low
-
-                self.msg.crc = self.crc.Crc(self.msg)
-                self.lowcmd_publisher.Write(self.msg)
-
                 self._last_cmd_q = cliped.copy()
+
+                if self.use_robot:
+                    self.msg.mode_machine = self.get_mode_machine()
+                    self.msg.mode_pr = 1
+
+                    try:
+                        self.msg.motor_cmd[G1_29_JointIndex.kNotUsedJoint0].q = 1.0
+                    except Exception:
+                        pass
+
+                    for idx, jid in enumerate(G1_29_JointArmIndex):
+                        self.msg.motor_cmd[jid].mode = 1
+                        self.msg.motor_cmd[jid].q   = float(cliped[idx])
+                        self.msg.motor_cmd[jid].dq  = 0.0
+                        self.msg.motor_cmd[jid].tau = float(arm_tauff_target[idx])
+                        if jid.value in {m.value for m in G1_29_JointWristIndex}:
+                            self.msg.motor_cmd[jid].kp = self.kp_wrist
+                            self.msg.motor_cmd[jid].kd = self.kd_wrist
+                        else:
+                            self.msg.motor_cmd[jid].kp = self.kp_low
+                            self.msg.motor_cmd[jid].kd = self.kd_low
+
+                    self.msg.crc = self.crc.Crc(self.msg)
+                    self.lowcmd_publisher.Write(self.msg)
+                else:
+                    for idx, jid in enumerate(LEFT_JOINT_INDICES_LIST + RIGHT_JOINT_INDICES_LIST):
+                        self.sim_current_q_all[jid] = float(cliped[idx])
+
+                    if self._joint_pub is not None:
+                        js = JointState()
+                        js.header.stamp = self._ros_node.get_clock().now().to_msg()
+                        js.name = all_joint_names
+                        js.position = [self.sim_current_q_all[i] for i in range(29)]
+                        self._joint_pub.publish(js)
 
                 if self._speed_gradual_max:
                     t_elapsed = time.time() - start
@@ -1010,7 +1059,8 @@ class G1_29_ArmController:
                 dt = time.time() - start
                 time.sleep(max(0.0, self.control_dt - dt))
             else:
-                self._hold_non_arm_joints()
+                if self.use_robot:
+                    self._hold_non_arm_joints()
                 time.sleep(self.control_dt)
 
     def _subscribe_motor_state(self):
@@ -1023,24 +1073,37 @@ class G1_29_ArmController:
                     self.motor_state[i].dq = msg.motor_state[i].dq
             time.sleep(0.001)
 
-class DataBuffer:
-    def __init__(self):
-        self.data = None
-        self.lock = threading.Lock()
-    def GetData(self):
-        with self.lock:
-            return self.data
-    def SetData(self, data):
-        with self.lock:
-            self.data = data
-
 
 def main():
+    rclpy.init()
+    node = Node("g1_arm_controller")
+    if not node.has_parameter('use_robot'):
+        node.declare_parameter('use_robot', True)
+
+    spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    spin_thread.start()
+
     app = QtWidgets.QApplication([])
     bridge = UiBridge()
-    ctrl = G1_29_ArmController(bridge, controlled_arms='right')
+
+    ctrl = G1_29_ArmController(
+        bridge,
+        controlled_arms='right',
+        show_ui=True,
+        ros_node=node,
+        ik_use_waist=True,
+        ik_alpha=0.2,
+        ik_max_dq_step=0.05,
+        arm_velocity_limit=2.0,
+    )
     ctrl.set_control_mode(True)
-    app.exec_()
+
+    try:
+        app.exec_()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
