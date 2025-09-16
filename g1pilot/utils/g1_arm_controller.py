@@ -15,7 +15,6 @@ from rclpy.time import Time
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile
 
-# TF2
 try:
     from tf2_ros import Buffer, TransformListener
     from tf2_geometry_msgs import do_transform_pose
@@ -33,7 +32,6 @@ import pinocchio as pin
 from pinocchio import SE3
 from ament_index_python.packages import get_package_share_directory
 
-# Unitree SDK (solo se usa si use_robot=True)
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import (LowCmd_ as hg_LowCmd, LowState_ as hg_LowState)
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
@@ -42,11 +40,56 @@ from unitree_sdk2py.utils.crc import CRC
 os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/runtime-root")
 
 
+def clamp(x, lo, hi):
+    return lo if x < lo else hi if x > hi else x
+
+def wrap_to_pi(a):
+    a = (a + np.pi) % (2*np.pi) - np.pi
+    return a
+
+def mat_to_quat_wxyz(R):
+    q = pin.Quaternion(R)
+    return np.array([q.w, q.x, q.y, q.z], dtype=float)
+
+def quat_wxyz_to_matrix(qwxyz):
+    w, x, y, z = qwxyz
+    q = pin.Quaternion(w, x, y, z)
+    return q.matrix()
+
+def quat_hemisphere(q0, q1):
+    if np.dot(q0, q1) < 0.0:
+        return -q1
+    return q1
+
+def quat_slerp(q0, q1, t):
+    q0 = np.array(q0, dtype=float) / np.linalg.norm(q0)
+    q1 = np.array(q1, dtype=float) / np.linalg.norm(q1)
+    q1 = quat_hemisphere(q0, q1)
+    dotv = np.clip(np.dot(q0, q1), -1.0, 1.0)
+    if dotv > 0.9995:
+        out = q0 + t*(q1 - q0)
+        return out / np.linalg.norm(out)
+    theta_0 = math.acos(dotv)
+    sin_0 = math.sin(theta_0)
+    theta = theta_0 * t
+    s0 = math.sin(theta_0 - theta) / sin_0
+    s1 = math.sin(theta) / sin_0
+    return (s0*q0 + s1*q1)
+
+def yaw_from_R(R):
+    return math.atan2(R[1,0], R[0,0])
+
+def rotz(yaw):
+    c, s = math.cos(yaw), math.sin(yaw)
+    return np.array([[c,-s,0],
+                     [s, c,0],
+                     [0, 0,1]], dtype=float)
+
+
 class MotorState:
     def __init__(self):
         self.q = None
         self.dq = None
-
 
 class G1_29_JointArmIndex(IntEnum):
     # Left arm
@@ -66,17 +109,13 @@ class G1_29_JointArmIndex(IntEnum):
     kRightWristPitch    = 27
     kRightWristYaw      = 28
 
-
 class G1_29_JointWristIndex(IntEnum):
-    # Left wrist
     kLeftWristRoll  = 19
     kLeftWristPitch = 20
     kLeftWristyaw   = 21
-    # Right wrist
     kRightWristRoll  = 26
     kRightWristPitch = 27
     kRightWristYaw   = 28
-
 
 class G1_29_JointWeakIndex(IntEnum):
     kLeftAnklePitch    = 4
@@ -89,7 +128,6 @@ class G1_29_JointWeakIndex(IntEnum):
     kRightShoulderRoll  = 23
     kRightShoulderYaw   = 24
     kRightElbow         = 25
-
 
 class G1_29_JointIndex(IntEnum):
     # Left leg
@@ -134,8 +172,6 @@ class G1_29_JointIndex(IntEnum):
     kNotUsedJoint4 = 33
     kNotUsedJoint5 = 34
 
-
-# Nombres ROS para publicar /joint_states
 JOINT_NAMES_ROS = {
     0: "left_hip_pitch_joint",   1: "left_hip_roll_joint",    2: "left_hip_yaw_joint",
     3: "left_knee_joint",        4: "left_ankle_pitch_joint", 5: "left_ankle_roll_joint",
@@ -149,39 +185,19 @@ JOINT_NAMES_ROS = {
 }
 
 JOINT_LIMITS_RAD = {
-    0: (-2.5307,  2.8798),
-    1: (-0.5236,  2.9671),
-    2: (-2.7576,  2.7576),
-    3: (-0.087267,2.8798),
-    4: (-0.87267, 0.5236),
-    5: (-0.2618,  0.2618),
-    6: (-2.5307,  2.8798),
-    7: (-2.9671,  0.5236),
-    8: (-2.7576,  2.7576),
-    9: (-0.087267,2.8798),
-    10:(-0.87267, 0.5236),
-    11:(-0.2618,  0.2618),
-
-    12:(-2.618,   2.618),
-    13:(-0.52,    0.52),
-    14:(-0.52,    0.52),
-
-    15:(-3.0892,  2.6704),
-    16:(-1.5882,  2.2515),
-    17:(-2.618,   2.618),
-    18:(-1.0472,  2.0944),
-    19:(-1.972222054, 1.972222054),
-    20:(-1.614429558, 1.614429558),
-    21:(-1.614429558, 1.614429558),
-
-    22:(-3.0892,  2.6704),
-    23:(-2.2515,  1.5882),
-    24:(-2.618,   2.618),
-    25:(-1.0472,  2.0944),
-    26:(-1.972222054, 1.972222054),
-    27:(-1.614429558, 1.614429558),
-    28:(-1.614429558, 1.614429558),
+    0: (-2.5307,  2.8798),  1: (-0.5236,  2.9671),  2: (-2.7576,  2.7576),
+    3: (-0.087267,2.8798),  4: (-0.87267, 0.5236),  5: (-0.2618,  0.2618),
+    6: (-2.5307,  2.8798),  7: (-2.9671,  0.5236),  8: (-2.7576,  2.7576),
+    9: (-0.087267,2.8798), 10:(-0.87267, 0.5236), 11:(-0.2618,  0.2618),
+    12:(-2.618,   2.618),  13:(-0.52,    0.52),   14:(-0.52,    0.52),
+    15:(-3.0892,  2.6704), 16:(-1.5882,  2.2515), 17:(-2.618,   2.618),
+    18:(-1.0472,  2.0944), 19:(-1.972222054, 1.972222054),
+    20:(-1.614429558, 1.614429558), 21:(-1.614429558, 1.614429558),
+    22:(-3.0892,  2.6704), 23:(-2.2515,  1.5882), 24:(-2.618,   2.618),
+    25:(-1.0472,  2.0944), 26:(-1.972222054, 1.972222054),
+    27:(-1.614429558, 1.614429558), 28:(-1.614429558, 1.614429558),
 }
+
 RIGHT_JOINT_INDICES_LIST = [22,23,24,25,26,27,28]
 LEFT_JOINT_INDICES_LIST  = [15,16,17,18,19,20,21]
 
@@ -225,14 +241,12 @@ for i, jid in enumerate([
 ]):
     JOINTID_TO_DUALINDEX[jid.value] = i
 
-
 def clamp_joint_vector(q_vals, joint_id_list):
     out = []
     for ii, jidx in enumerate(joint_id_list):
         lo, hi = JOINT_LIMITS_RAD[jidx]
         out.append(float(np.clip(q_vals[ii], lo, hi)))
     return np.array(out, dtype=float)
-
 
 # ------------------------------ UI ------------------------------
 class UiBridge(QtCore.QObject):
@@ -247,7 +261,6 @@ class UiBridge(QtCore.QObject):
         except Exception as e:
             print(f"[UiBridge] Error callable: {e}", flush=True)
 
-
 class ArmGUI(QtWidgets.QWidget):
     valuesChanged = QtCore.pyqtSignal(object)
 
@@ -255,18 +268,14 @@ class ArmGUI(QtWidgets.QWidget):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(720 if len(joint_ids) == 14 else 520)
-
         self.joint_ids   = joint_ids[:]
         self.joint_names = joint_names[:]
 
         root = QtWidgets.QVBoxLayout(self)
         self.setLayout(root)
-
         columns = QtWidgets.QHBoxLayout()
         root.addLayout(columns, stretch=1)
-
-        self.sliders = []
-        self.value_labels = []
+        self.sliders = []; self.value_labels = []
 
         init_q = get_initial_q_radians_callable() or [0.0]*len(self.joint_ids)
         if len(init_q) != len(self.joint_ids):
@@ -275,55 +284,33 @@ class ArmGUI(QtWidgets.QWidget):
 
         def make_slider_row(name, jidx, deg0):
             row = QtWidgets.QHBoxLayout()
-            lab = QtWidgets.QLabel(name)
-            lab.setFixedWidth(180)
-
+            lab = QtWidgets.QLabel(name); lab.setFixedWidth(180)
             lo_rad, hi_rad = JOINT_LIMITS_RAD[jidx]
-            lo_deg = int(round(math.degrees(lo_rad)))
-            hi_deg = int(round(math.degrees(hi_rad)))
-
+            lo_deg = int(round(math.degrees(lo_rad))); hi_deg = int(round(math.degrees(hi_rad)))
             sld = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
             sld.setMinimum(lo_deg); sld.setMaximum(hi_deg)
             sld.setSingleStep(1); sld.setPageStep(5)
             sld.setTickInterval(max(5, (hi_deg - lo_deg) // 12))
             sld.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
-
-            deg0 = max(lo_deg, min(hi_deg, deg0))
-            sld.setValue(deg0)
-
-            val_lab = QtWidgets.QLabel(f"{deg0:>4}°")
-            val_lab.setFixedWidth(60)
-
+            deg0 = max(lo_deg, min(hi_deg, deg0)); sld.setValue(deg0)
+            val_lab = QtWidgets.QLabel(f"{deg0:>4}°"); val_lab.setFixedWidth(60)
             return row, lab, sld, val_lab
 
         if len(self.joint_ids) == 14:
-            left_ids  = LEFT_JOINT_INDICES_LIST
-            right_ids = RIGHT_JOINT_INDICES_LIST
-
-            left_names  = JOINT_NAMES_LEFT
-            right_names = JOINT_NAMES_RIGHT
-
-            col_left  = QtWidgets.QVBoxLayout()
-            col_right = QtWidgets.QVBoxLayout()
-            columns.addLayout(col_left, 1)
-            columns.addSpacing(16)
-            columns.addLayout(col_right, 1)
-
-            left_title  = QtWidgets.QLabel("Left Arm")
-            right_title = QtWidgets.QLabel("Right Arm")
-            left_title.setStyleSheet("font-weight:600;")
-            right_title.setStyleSheet("font-weight:600;")
-            col_left.addWidget(left_title)
-            col_right.addWidget(right_title)
+            left_ids  = LEFT_JOINT_INDICES_LIST; right_ids = RIGHT_JOINT_INDICES_LIST
+            left_names  = JOINT_NAMES_LEFT;      right_names = JOINT_NAMES_RIGHT
+            col_left  = QtWidgets.QVBoxLayout(); col_right = QtWidgets.QVBoxLayout()
+            columns.addLayout(col_left, 1); columns.addSpacing(16); columns.addLayout(col_right, 1)
+            left_title  = QtWidgets.QLabel("Left Arm");  right_title = QtWidgets.QLabel("Right Arm")
+            left_title.setStyleSheet("font-weight:600;"); right_title.setStyleSheet("font-weight:600;")
+            col_left.addWidget(left_title); col_right.addWidget(right_title)
 
             for i, (name, jidx) in enumerate(zip(left_names, left_ids)):
                 deg0 = int(round(math.degrees(init_q[i])))
                 row, lab, sld, val_lab = make_slider_row(name, jidx, deg0)
                 sld.valueChanged.connect(lambda v, idx=i, vl=val_lab: self._on_slider(idx, v, vl))
                 row.addWidget(lab); row.addWidget(sld, 1); row.addWidget(val_lab)
-                col_left.addLayout(row)
-                self.sliders.append(sld); self.value_labels.append(val_lab)
-
+                col_left.addLayout(row); self.sliders.append(sld); self.value_labels.append(val_lab)
             offset = 7
             for k, (name, jidx) in enumerate(zip(right_names, right_ids)):
                 i = offset + k
@@ -331,34 +318,27 @@ class ArmGUI(QtWidgets.QWidget):
                 row, lab, sld, val_lab = make_slider_row(name, jidx, deg0)
                 sld.valueChanged.connect(lambda v, idx=i, vl=val_lab: self._on_slider(idx, v, vl))
                 row.addWidget(lab); row.addWidget(sld, 1); row.addWidget(val_lab)
-                col_right.addLayout(row)
-                self.sliders.append(sld); self.value_labels.append(val_lab)
-
+                col_right.addLayout(row); self.sliders.append(sld); self.value_labels.append(val_lab)
         else:
-            single_col = QtWidgets.QVBoxLayout()
-            columns.addLayout(single_col, 1)
-
+            single_col = QtWidgets.QVBoxLayout(); columns.addLayout(single_col, 1)
             for i, (name, jidx) in enumerate(zip(self.joint_names, self.joint_ids)):
                 deg0 = int(round(math.degrees(init_q[i])))
                 row, lab, sld, val_lab = make_slider_row(name, jidx, deg0)
                 sld.valueChanged.connect(lambda v, idx=i, vl=val_lab: self._on_slider(idx, v, vl))
                 row.addWidget(lab); row.addWidget(sld, 1); row.addWidget(val_lab)
-                single_col.addLayout(row)
-                self.sliders.append(sld); self.value_labels.append(val_lab)
+                single_col.addLayout(row); self.sliders.append(sld); self.value_labels.append(val_lab)
 
         btns = QtWidgets.QHBoxLayout()
         btn_center = QtWidgets.QPushButton("Center (0°)")
         btn_center.clicked.connect(self._center_all)
-        btns.addStretch(1); btns.addWidget(btn_center)
-        root.addLayout(btns)
+        btns.addStretch(1); btns.addWidget(btn_center); root.addLayout(btns)
 
     def _on_slider(self, idx, value_deg, val_label):
         val_label.setText(f"{int(value_deg):>4}°")
         vals_rad = []
         for sld, jidx in zip(self.sliders, self.joint_ids):
             lo_rad, hi_rad = JOINT_LIMITS_RAD[jidx]
-            rad = math.radians(sld.value())
-            vals_rad.append(float(np.clip(rad, lo_rad, hi_rad)))
+            rad = math.radians(sld.value()); vals_rad.append(float(np.clip(rad, lo_rad, hi_rad)))
         self.valuesChanged.emit(vals_rad)
 
     def _center_all(self):
@@ -375,13 +355,9 @@ class ArmGUI(QtWidgets.QWidget):
         for i, (val, jidx) in enumerate(zip(q_rad_in_gui_order, self.joint_ids)):
             lo_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][0])))
             hi_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][1])))
-            deg = int(round(math.degrees(val)))
-            deg = max(lo_deg, min(hi_deg, deg))
-            self.sliders[i].blockSignals(True)
-            self.sliders[i].setValue(deg)
-            self.value_labels[i].setText(f"{deg:>4}°")
-            self.sliders[i].blockSignals(False)
-
+            deg = int(round(math.degrees(val))); deg = max(lo_deg, min(hi_deg, deg))
+            self.sliders[i].blockSignals(True); self.sliders[i].setValue(deg)
+            self.value_labels[i].setText(f"{deg:>4}°"); self.sliders[i].blockSignals(False)
 
 class DataBuffer:
     def __init__(self):
@@ -400,6 +376,7 @@ class G1_29_ArmController:
                  show_ui: bool = True, ros_node: Node = None, ik_use_waist: bool = False,
                  ik_alpha: float = 0.2, ik_max_dq_step: float = 0.05, arm_velocity_limit: float = 2.0,
                  urdf_path: str = None, mesh_dir: str = None,):
+
         self.motor_state = [MotorState() for _ in range(35)]
 
         self._ros_node = ros_node
@@ -441,11 +418,7 @@ class G1_29_ArmController:
 
         self.gui_joint_ids   = JOINT_GROUPS[self.controlled_arms]
         self.gui_joint_names = _names_for(self.controlled_arms)
-        self.gui_title       = {
-            "right": "G1 – Right Arm Control",
-            "left":  "G1 – Left Arm Control",
-            "both":  "G1 – Both Arms Control",
-        }[self.controlled_arms]
+        self.gui_title       = {"right":"G1 – Right Arm Control","left":"G1 – Left Arm Control","both":"G1 – Both Arms Control"}[self.controlled_arms]
 
         self.sim_current_q_all = np.zeros(29, dtype=float)
 
@@ -492,14 +465,25 @@ class G1_29_ArmController:
         self._ik_tol = 1e-4
 
         self._ik_use_waist = bool(ik_use_waist)
-        self._ik_track_orientation = False
+        self._ik_track_orientation = True
+        self._ik_orientation_mode = "full"  # "full" | "yaw" | "none"
         self._ik_pos_gain = 1.0
-        self._ik_ori_gain = 0.2
+        self._ik_ori_gain = 0.8
         self._ik_debug = False
 
+        self._ik_adaptive_damping = True
+        self._ik_sigma_min_thresh = 0.08
+        self._ik_lambda_base = 1e-6
+        self._ik_lambda_max  = 1e-1
+
+        self._ik_max_ori_step_rad = 0.35  # ~20°
+        self._goal_filter_alpha = 0.25  # [0..1]
+
         self._ik_have_joint_map = False
-        self._ik_goal_left  = None
-        self._ik_goal_right = None
+        self._ik_goal_left_raw  = None
+        self._ik_goal_right_raw = None
+        self._ik_goal_left      = None
+        self._ik_goal_right     = None
         self._ik_q_prev_14  = None
         self._ik_q_prev_full = None
         self._log_ik_active = False
@@ -530,13 +514,20 @@ class G1_29_ArmController:
                     pass
                 return default
 
-            self._ik_use_waist = bool(_safe_get('ik_use_waist', self._ik_use_waist))
-            self._ik_alpha = float(_safe_get('ik_alpha', self._ik_alpha))
-            self._ik_max_dq_step = float(_safe_get('ik_max_dq_step', self._ik_max_dq_step))
-            self.arm_velocity_limit = float(_safe_get('arm_velocity_limit', self.arm_velocity_limit))
-            self._ik_track_orientation = bool(_safe_get('ik_track_orientation', self._ik_track_orientation))
-            self._ik_world_frame = str(_safe_get('ik_world_frame', self._ik_world_frame))
-            self._ee_auto_calibrate = bool(_safe_get('ee_auto_calibrate', self._ee_auto_calibrate))
+            self._ik_use_waist          = bool(_safe_get('ik_use_waist', self._ik_use_waist))
+            self._ik_alpha              = float(_safe_get('ik_alpha', self._ik_alpha))
+            self._ik_max_dq_step        = float(_safe_get('ik_max_dq_step', self._ik_max_dq_step))
+            self.arm_velocity_limit     = float(_safe_get('arm_velocity_limit', self.arm_velocity_limit))
+            self._ik_track_orientation  = bool(_safe_get('ik_track_orientation', self._ik_track_orientation))
+            self._ik_orientation_mode   = str(_safe_get('ik_orientation_mode', self._ik_orientation_mode)).lower()
+            self._ik_pos_gain           = float(_safe_get('ik_pos_gain', self._ik_pos_gain))
+            self._ik_ori_gain           = float(_safe_get('ik_ori_gain', self._ik_ori_gain))
+            self._ik_adaptive_damping   = bool(_safe_get('ik_adaptive_damping', self._ik_adaptive_damping))
+            self._ik_sigma_min_thresh   = float(_safe_get('ik_sigma_min_thresh', self._ik_sigma_min_thresh))
+            self._ik_max_ori_step_rad   = float(_safe_get('ik_max_ori_step_rad', self._ik_max_ori_step_rad))
+            self._goal_filter_alpha     = float(_safe_get('ik_goal_filter_alpha', self._goal_filter_alpha))
+            self._ik_world_frame        = str(_safe_get('ik_world_frame', self._ik_world_frame))
+            self._ee_auto_calibrate     = bool(_safe_get('ee_auto_calibrate', self._ee_auto_calibrate))
 
             arr = _safe_get('ee_offset_right_xyz', list(self._ee_off_right_xyz))
             if isinstance(arr, (list, tuple)) and len(arr) == 3:
@@ -560,7 +551,6 @@ class G1_29_ArmController:
                 except Exception as e:
                     print(f"[IK] No pude iniciar TF2: {e}", flush=True)
 
-        # IK/URDF
         try:
             self.pin = pin
             self.SE3 = SE3
@@ -579,8 +569,7 @@ class G1_29_ArmController:
 
                 _joint_index_to_ros_name = JOINT_NAMES_ROS
                 self._ros_joint_names = [_joint_index_to_ros_name[i] for i in range(29)]
-                self._name_to_q_index = {}
-                self._name_to_v_index = {}
+                self._name_to_q_index = {}; self._name_to_v_index = {}
                 for j in range(1, self.model.njoints):
                     jnt = self.model.joints[j]
                     if jnt.nq == 1:
@@ -695,7 +684,6 @@ class G1_29_ArmController:
         if self.use_robot:
             msg = self.lowstate_buffer.GetData()
             return np.array([msg.motor_state[id].q for id in G1_29_JointArmIndex], dtype=float)
-
         left = [self.sim_current_q_all[j] for j in LEFT_JOINT_INDICES_LIST]
         right= [self.sim_current_q_all[j] for j in RIGHT_JOINT_INDICES_LIST]
         return np.array(left + right, dtype=float)
@@ -791,12 +779,39 @@ class G1_29_ArmController:
             return None
         return self.data.oMf[fid]
 
+    def _gate_auto_calibration(self, T_goal_in, side):
+        M_cur = self._fk_current_ee(side)
+        if M_cur is None:
+            return None
+        dp = np.linalg.norm(T_goal_in.translation - M_cur.translation)
+        dq = pin.Quaternion(M_cur.rotation.T @ T_goal_in.rotation)
+        ang = 2*math.atan2(np.linalg.norm([dq.x, dq.y, dq.z]), abs(dq.w))
+        if dp < 0.05 and ang < math.radians(12.0):
+            return M_cur
+        return None
+
+    def _lowpass_goal(self, T_prev, T_new, alpha):
+        if T_prev is None:
+            return T_new
+        p = (1.0 - alpha) * T_prev.translation + alpha * T_new.translation
+        q0 = mat_to_quat_wxyz(T_prev.rotation)
+        q1 = mat_to_quat_wxyz(T_new.rotation)
+        qf = quat_slerp(q0, q1, alpha)
+        Rf = quat_wxyz_to_matrix(qf)
+        return self.SE3(Rf, p)
+
+    def _limit_ori_step(self, R_cur, R_des, max_step):
+        R_err = R_cur.T @ R_des
+        aa = pin.log3(R_err)
+        norm = float(np.linalg.norm(aa))
+        if norm <= 1e-12 or norm <= max_step:
+            return R_des
+        aa_limited = aa * (max_step / norm)
+        R_step = pin.exp3(aa_limited)
+        return R_cur @ R_step
+
     def _ik_target_cb(self, side, msg):
         msg_tf = self._transform_pose_to_world(msg)
-        if self._ik_debug:
-            print(f"[IK] target {side} @'{msg_tf.header.frame_id or self._ik_world_frame}' "
-                  f"p=({msg_tf.pose.position.x:.3f},{msg_tf.pose.position.y:.3f},{msg_tf.pose.position.z:.3f})", flush=True)
-
         if not self._ik_have_joint_map:
             return
         try:
@@ -809,26 +824,27 @@ class G1_29_ArmController:
 
             T_auto = self._T_off_right_auto if side == 'right' else self._T_off_left_auto
             auto_done = self._auto_done_right if side == 'right' else self._auto_done_left
+
             if self._ee_auto_calibrate and not auto_done:
-                M_cur = self._fk_current_ee(side)
-                if M_cur is not None:
+                M_cur_ok = self._gate_auto_calibration(T_goal_in, side)
+                if M_cur_ok is not None:
                     T_pre = T_goal_in * T_static
-                    T_auto = T_pre.inverse() * M_cur
+                    T_auto = T_pre.inverse() * M_cur_ok
                     if side == 'right':
-                        self._T_off_right_auto = T_auto
-                        self._auto_done_right = True
+                        self._T_off_right_auto = T_auto; self._auto_done_right = True
                     else:
-                        self._T_off_left_auto = T_auto
-                        self._auto_done_left = True
+                        self._T_off_left_auto  = T_auto; self._auto_done_left  = True
                     t = T_auto.translation
-                    print(f"[IK] auto-calibrated {side}: offset transl=({t[0]:.3f},{t[1]:.3f},{t[2]:.3f})", flush=True)
-                else:
-                    pass
+                    print(f"[IK] auto-calibrated {side}: d=({t[0]:.3f},{t[1]:.3f},{t[2]:.3f})", flush=True)
+
+            T_raw = T_goal_in * T_static * (T_auto if T_auto is not None else self.SE3.Identity())
 
             if side == 'right':
-                self._ik_goal_right = T_goal_in * T_static * (self._T_off_right_auto if self._T_off_right_auto is not None else self.SE3.Identity())
+                self._ik_goal_right_raw = T_raw
+                self._ik_goal_right = self._lowpass_goal(self._ik_goal_right, T_raw, self._goal_filter_alpha)
             else:
-                self._ik_goal_left  = T_goal_in * T_static * (self._T_off_left_auto  if self._T_off_left_auto  is not None else self.SE3.Identity())
+                self._ik_goal_left_raw = T_raw
+                self._ik_goal_left  = self._lowpass_goal(self._ik_goal_left, T_raw, self._goal_filter_alpha)
 
         except Exception as e:
             print(f"[IK] target_cb error: {e}", flush=True)
@@ -841,26 +857,6 @@ class G1_29_ArmController:
                 nm = self.model.names[j]
                 if nm in self._name_to_q_index:
                     out.append(nm)
-        return out
-
-    def _ordered_selected_names(self, side):
-        wanted = set()
-        if self._ik_use_waist:
-            wanted.update(["waist_yaw_joint", "waist_roll_joint", "waist_pitch_joint"])
-        if side == 'right':
-            wanted.update([
-                "right_shoulder_pitch_joint","right_shoulder_roll_joint","right_shoulder_yaw_joint",
-                "right_elbow_joint","right_wrist_roll_joint","right_wrist_pitch_joint","right_wrist_yaw_joint",
-            ])
-        else:
-            wanted.update([
-                "left_shoulder_pitch_joint","left_shoulder_roll_joint","left_shoulder_yaw_joint",
-                "left_elbow_joint","left_wrist_roll_joint","left_wrist_pitch_joint","left_wrist_yaw_joint",
-            ])
-        out = []
-        for nm in self._ordered_1d_names():
-            if nm in wanted:
-                out.append(nm)
         return out
 
     def _ik_solve_single(self, side, q_init=None):
@@ -899,14 +895,18 @@ class G1_29_ArmController:
         if T_goal is None:
             return None
 
+        self.pin.forwardKinematics(self.model, self.data, q)
+        self.pin.updateFramePlacements(self.model, self.data)
+        M_cur0 = self.data.oMf[fid]
+        R_limited = self._limit_ori_step(M_cur0.rotation, T_goal.rotation, self._ik_max_ori_step_rad)
+        T_goal_limited = self.SE3(R_limited, T_goal.translation.copy())
+
         selected_names = []
         for j in range(1, self.model.njoints):
             jnt = self.model.joints[j]
-            if jnt.nq != 1:
-                continue
+            if jnt.nq != 1: continue
             nm = self.model.names[j]
-            if nm in arm_names:
-                selected_names.append(nm)
+            if nm in arm_names: selected_names.append(nm)
         if not selected_names:
             return None
 
@@ -923,30 +923,55 @@ class G1_29_ArmController:
             J6 = self.pin.computeFrameJacobian(self.model, self.data, q, fid, self.pin.LOCAL_WORLD_ALIGNED)
             J_eff = J6[:, v_cols]
 
-            if self._ik_track_orientation:
-                err6 = self.pin.log(M_cur.inverse() * T_goal).vector
-                J_use = np.vstack([
-                    J_eff[:3, :] * self._ik_pos_gain,
-                    J_eff[3:, :] * self._ik_ori_gain
-                ])
-                err_use = np.hstack([
-                    err6[:3] * self._ik_pos_gain,
-                    err6[3:] * self._ik_ori_gain
-                ])
-                err_norm = float(np.linalg.norm(err6))
+            if self._ik_track_orientation and self._ik_orientation_mode != "none":
+                if self._ik_orientation_mode == "yaw":
+                    yaw_cur = yaw_from_R(M_cur.rotation)
+                    yaw_des = yaw_from_R(T_goal_limited.rotation)
+                    err_yaw = wrap_to_pi(yaw_des - yaw_cur)
+                    pos_err = (T_goal_limited.translation - M_cur.translation).reshape(3)
+                    err_use = np.hstack([pos_err * self._ik_pos_gain,
+                                         [0.0, 0.0, err_yaw * self._ik_ori_gain]])
+                    J_use = np.vstack([J_eff[:3, :],
+                                       np.zeros((2, J_eff.shape[1])),
+                                       J_eff[5:6, :]])
+                    err_norm = float(np.linalg.norm(pos_err)) + abs(err_yaw)
+                else:
+                    err6 = self.pin.log(M_cur.inverse() * T_goal_limited).vector  # [dx,dy,dz, wx,wy,wz]
+                    ori_norm = float(np.linalg.norm(err6[3:]))
+                    if ori_norm > self._ik_max_ori_step_rad:
+                        err6[3:] *= (self._ik_max_ori_step_rad / ori_norm)
+                    J_use = np.vstack([
+                        J_eff[:3, :] * self._ik_pos_gain,
+                        J_eff[3:, :] * self._ik_ori_gain
+                    ])
+                    err_use = np.hstack([
+                        err6[:3] * self._ik_pos_gain,
+                        err6[3:] * self._ik_ori_gain
+                    ])
+                    err_norm = float(np.linalg.norm(err6))
             else:
-                err_use = (T_goal.translation - M_cur.translation).reshape(3)
+                err_use = (T_goal_limited.translation - M_cur.translation).reshape(3) * self._ik_pos_gain
                 J_use = J_eff[:3, :]
                 err_norm = float(np.linalg.norm(err_use))
 
             if self._ik_debug:
-                print(f"[IK] {side} | ||err||={err_norm:.4e}", flush=True)
-
+                print(f"[IK] {side} ||err||={err_norm:.3e}", flush=True)
             if err_norm < self._ik_tol:
                 break
 
+            lam = self._ik_lambda_base
+            if self._ik_adaptive_damping:
+                try:
+                    svals = np.linalg.svd(J_use, compute_uv=False)
+                    sigma_min = float(np.min(svals)) if svals.size > 0 else 0.0
+                except Exception:
+                    sigma_min = 0.0
+                if sigma_min < self._ik_sigma_min_thresh:
+                    frac = clamp((self._ik_sigma_min_thresh - sigma_min) / max(1e-6, self._ik_sigma_min_thresh), 0.0, 1.0)
+                    lam = self._ik_lambda_base + frac*(self._ik_lambda_max - self._ik_lambda_base)
+
             JJt = J_use @ J_use.T
-            dq_red = J_use.T @ np.linalg.solve(JJt + self._ik_damping * np.eye(J_use.shape[0]), err_use)
+            dq_red = J_use.T @ np.linalg.solve(JJt + lam * np.eye(J_use.shape[0]), err_use)
 
             dq_full = np.zeros(self.model.nv)
             for i, vi in enumerate(v_cols):
@@ -1000,7 +1025,6 @@ class G1_29_ArmController:
 
     def _ctrl_motor_state(self):
         all_joint_names = [JOINT_NAMES_ROS[i] for i in sorted(JOINT_NAMES_ROS.keys())]
-
         while True:
             if self.control_mode:
                 start = time.time()
@@ -1008,9 +1032,8 @@ class G1_29_ArmController:
                     arm_q_target     = self.q_target.copy()
                     arm_tauff_target = self.tauff_target.copy()
 
-                # IK activa
                 if self._ik_have_joint_map and self._ik_enabled and (self._ik_goal_left is not None or self._ik_goal_right is not None):
-                    if not hasattr(self, "_log_ik_active"):
+                    if not self._log_ik_active:
                         print("[IK] Activated: Using IK to update q_target", flush=True)
                         self._log_ik_active = True
                     arm_q_target = self._ik_update_q_target(arm_q_target)
@@ -1044,7 +1067,6 @@ class G1_29_ArmController:
                 else:
                     for idx, jid in enumerate(LEFT_JOINT_INDICES_LIST + RIGHT_JOINT_INDICES_LIST):
                         self.sim_current_q_all[jid] = float(cliped[idx])
-
                     if self._joint_pub is not None:
                         js = JointState()
                         js.header.stamp = self._ros_node.get_clock().now().to_msg()
@@ -1079,6 +1101,28 @@ def main():
     node = Node("g1_arm_controller")
     if not node.has_parameter('use_robot'):
         node.declare_parameter('use_robot', True)
+
+    defaults = {
+        'ik_orientation_mode': 'yaw',
+        'ik_goal_filter_alpha': 0.3,
+        'ik_sigma_min_thresh': 0.08,
+        'ik_max_ori_step_rad': 0.35,
+        'ik_adaptive_damping': True,
+        'ik_pos_gain': 1.0,
+        'ik_ori_gain': 0.7,
+        'ik_use_waist': True,
+        'ik_alpha': 0.2,
+        'ik_max_dq_step': 0.05,
+        'arm_velocity_limit': 2.0,
+        'ik_world_frame': 'odom',
+        'ee_auto_calibrate': True,
+    }
+    for k, v in defaults.items():
+        try:
+            if not node.has_parameter(k):
+                node.declare_parameter(k, v)
+        except Exception:
+            pass
 
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
