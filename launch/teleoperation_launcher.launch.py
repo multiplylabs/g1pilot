@@ -7,7 +7,10 @@ def generate_launch_description():
             package='g1pilot',
             executable='joystick',
             name='joystick',
-            output='screen'
+            output='screen',
+            parameters=[
+                {'joystick_name': 'Pro Controller',
+                 }],
         ),
 
         Node(

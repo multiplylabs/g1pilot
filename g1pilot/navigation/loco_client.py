@@ -19,7 +19,6 @@ from unitree_sdk2py.g1.loco.g1_loco_api import (
     ROBOT_API_ID_LOCO_GET_FSM_MODE,
 )
 
-# importa tu controlador (archivo anterior)
 from g1pilot.utils.g1_arm_controller import G1_29_ArmController
 
 
@@ -43,10 +42,10 @@ class G1LocoClient(Node):
         self.control_arms = False
         self.ui_bridge = ui_bridge
 
-        self.declare_parameter('use_robot', False)
+        self.declare_parameter('use_robot', True)
         self.use_robot = bool(self.get_parameter('use_robot').value)
 
-        self.declare_parameter('interface', 'wlp2s0f0')
+        self.declare_parameter('interface', 'eth0')
         interface = self.get_parameter('interface').get_parameter_value().string_value
         self.declare_parameter('arm_controlled', 'both')  # Options: 'left', 'right', 'both'
         self.arm_controlled = self.get_parameter('arm_controlled').get_parameter_value().string_value
@@ -179,7 +178,7 @@ class G1LocoClient(Node):
                 self.log_once_attr("info", "Disabling arm control mode.", "_disable_arm_control_logged")
 
         # L1 -> Emergency stop
-        if msg.buttons[4] == 1 and self.prev_buttons[4] == 0:
+        if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:
             self.log_once_attr("warn", "Emergency stop button pressed!", "_e_stop_button_pressed_logged")
             self.robot_stopped = True
             self.balanced = False
@@ -188,30 +187,32 @@ class G1LocoClient(Node):
             if self.control_arms:
                 self.control_arms = False
                 self.arm_control.set_control_mode(False)
-        if msg.buttons[4] == 0 and self.prev_buttons[4] == 1:
+        if msg.buttons[5] == 0 and self.prev_buttons[5] == 1:
             self.clear_attr("_e_stop_button_pressed_logged")
 
         # R1 -> Balancing
-        if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:
+        if msg.buttons[6] == 1 and self.prev_buttons[6] == 0:
             if not self.balanced:
                 self.log_once_attr("info", "Starting balancing procedure...", "_start_balance_r1_logged")
                 self.entering_balancing(max_height=0.5, step=0.02)
                 self.log_once_attr("info", "Balancing procedure completed.", "_balance_completed_r1_logged")
             else:
                 self.log_once_attr("info", "Already balanced, no action taken.", "_already_balanced_notice_r1_logged")
-        if msg.buttons[5] == 0 and self.prev_buttons[5] == 1:
+        if msg.buttons[6] == 0 and self.prev_buttons[6] == 1:
             self.clear_attr("_start_balance_r1_logged")
             self.clear_attr("_balance_completed_r1_logged")
             self.clear_attr("_already_balanced_notice_r1_logged")
 
         # R2 (hold) -> Move
-        if msg.buttons[7] == 0 and not self.robot_stopped and self.balanced:
+        if msg.buttons[8] == 0 and not self.robot_stopped and self.balanced:
             if self.use_robot and self.robot is not None:
                 self.robot.StopMove()
-        if msg.buttons[7] == 1 and not self.robot_stopped and self.balanced:
-            vx  = round(msg.axes[1] * 0.5 * -1, 2)
-            vy  = round(msg.axes[0] * 0.4 * -1, 2)
-            yaw = round(msg.axes[3] * 0.4 * -1, 2)
+
+        if msg.buttons[8] == 1 and not self.robot_stopped and self.balanced:
+            vx  = round(msg.axes[1] * 0.8 * -1, 2)
+            vy  = round(msg.axes[0] * 0.8 * -1, 2)
+            yaw = round(msg.axes[3] * 0.8 * -1, 2)
+            self.log_once_attr("info", f"Moving with vx: {vx}, vy: {vy}, yaw: {yaw}", "_moving_logged")
             if self.use_robot and self.robot is not None:
                 if abs(vx) < 0.03 and abs(vy) < 0.03 and abs(yaw) < 0.03:
                     self.robot.StopMove()

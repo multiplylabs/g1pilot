@@ -16,6 +16,9 @@ class DirectJoyPublisher(Node):
         self.declare_parameter("publish_rate", 50.0)
         self.rate = self.get_parameter("publish_rate").get_parameter_value().double_value
 
+        self.declare_parameter("joystick_name", "Wireless Controller")
+        self.joystick_name = self.get_parameter("joystick_name").get_parameter_value().string_value
+
         self.device = self.find_joystick()
         if self.device is None:
             self.get_logger().error('No joystick found!')
@@ -27,9 +30,8 @@ class DirectJoyPublisher(Node):
         self.buttons = []
         self.lock = threading.Lock()
 
-        # Estado de autonomía y memoria del botón Triángulo
         self.auto_enabled = False
-        self.triangle_prev = 0  # 0 -> no pulsado, 1 -> pulsado
+        self.triangle_prev = 0
 
         self.init_controls()
 
@@ -41,7 +43,7 @@ class DirectJoyPublisher(Node):
     def find_joystick(self):
         for path in evdev.list_devices():
             dev = evdev.InputDevice(path)
-            if dev.name == 'Wireless Controller':  # DualShock 4
+            if dev.name == self.joystick_name:
                 return dev
         return None
 
@@ -56,7 +58,7 @@ class DirectJoyPublisher(Node):
         self.button_map = {code: idx for idx, code in enumerate(key_info)}
 
     def read_joystick(self):
-        BTN_TRIANGLE = evdev.ecodes.BTN_NORTH  # Triángulo (PS) / Y (Xbox)
+        BTN_TRIANGLE = evdev.ecodes.BTN_NORTH
         for event in self.device.read_loop():
             with self.lock:
                 if event.type == evdev.ecodes.EV_ABS and event.code in self.axis_map:
@@ -71,7 +73,6 @@ class DirectJoyPublisher(Node):
                     idx = self.button_map[event.code]
                     self.buttons[idx] = int(event.value)
 
-                    # --- Toggle autonomía en flanco de subida del Triángulo ---
                     if event.code == BTN_TRIANGLE:
                         if self.triangle_prev == 0 and event.value == 1:
                             self.auto_enabled = not self.auto_enabled
