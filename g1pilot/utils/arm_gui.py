@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from PyQt6 import QtCore, QtWidgets
+from PyQt5 import QtWidgets, QtCore
 
 from g1pilot.utils.joints_names import (
     JOINT_LIMITS_RAD,
