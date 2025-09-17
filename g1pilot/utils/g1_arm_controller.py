@@ -6,7 +6,6 @@ import math
 import time
 import threading
 import numpy as np
-from enum import IntEnum
 from PyQt5 import QtWidgets, QtCore
 
 import rclpy
@@ -37,190 +36,43 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import (LowCmd_ as hg_LowCmd, LowSta
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.utils.crc import CRC
 
-os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/runtime-root")
+from g1pilot.utils.joints_names import (
+    JOINT_NAMES_ROS,
+    JOINT_LIMITS_RAD,
+    RIGHT_JOINT_INDICES_LIST,
+    LEFT_JOINT_INDICES_LIST,
+    JOINT_GROUPS,
+    JOINT_NAMES_LEFT,
+    JOINT_NAMES_RIGHT,
+)
 
+from g1pilot.utils.helpers import (
+    clamp,
+    wrap_to_pi,
+    mat_to_quat_wxyz,
+    quat_wxyz_to_matrix,
+    quat_slerp,
+    yaw_from_R,
+)
 
-def clamp(x, lo, hi):
-    return lo if x < lo else hi if x > hi else x
+from g1pilot.utils.common import (
+    MotorState,
+    G1_29_JointArmIndex,
+    G1_29_JointWristIndex,
+    G1_29_JointWeakIndex,
+    G1_29_JointIndex,
+    DataBuffer,
+)
 
-def wrap_to_pi(a):
-    a = (a + np.pi) % (2*np.pi) - np.pi
-    return a
-
-def mat_to_quat_wxyz(R):
-    q = pin.Quaternion(R)
-    return np.array([q.w, q.x, q.y, q.z], dtype=float)
-
-def quat_wxyz_to_matrix(qwxyz):
-    w, x, y, z = qwxyz
-    q = pin.Quaternion(w, x, y, z)
-    return q.matrix()
-
-def quat_hemisphere(q0, q1):
-    if np.dot(q0, q1) < 0.0:
-        return -q1
-    return q1
-
-def quat_slerp(q0, q1, t):
-    q0 = np.array(q0, dtype=float) / np.linalg.norm(q0)
-    q1 = np.array(q1, dtype=float) / np.linalg.norm(q1)
-    q1 = quat_hemisphere(q0, q1)
-    dotv = np.clip(np.dot(q0, q1), -1.0, 1.0)
-    if dotv > 0.9995:
-        out = q0 + t*(q1 - q0)
-        return out / np.linalg.norm(out)
-    theta_0 = math.acos(dotv)
-    sin_0 = math.sin(theta_0)
-    theta = theta_0 * t
-    s0 = math.sin(theta_0 - theta) / sin_0
-    s1 = math.sin(theta) / sin_0
-    return (s0*q0 + s1*q1)
-
-def yaw_from_R(R):
-    return math.atan2(R[1,0], R[0,0])
-
-def rotz(yaw):
-    c, s = math.cos(yaw), math.sin(yaw)
-    return np.array([[c,-s,0],
-                     [s, c,0],
-                     [0, 0,1]], dtype=float)
-
-
-class MotorState:
-    def __init__(self):
-        self.q = None
-        self.dq = None
-
-class G1_29_JointArmIndex(IntEnum):
-    # Left arm
-    kLeftShoulderPitch = 15
-    kLeftShoulderRoll  = 16
-    kLeftShoulderYaw   = 17
-    kLeftElbow         = 18
-    kLeftWristRoll     = 19
-    kLeftWristPitch    = 20
-    kLeftWristyaw      = 21
-    # Right arm
-    kRightShoulderPitch = 22
-    kRightShoulderRoll  = 23
-    kRightShoulderYaw   = 24
-    kRightElbow         = 25
-    kRightWristRoll     = 26
-    kRightWristPitch    = 27
-    kRightWristYaw      = 28
-
-class G1_29_JointWristIndex(IntEnum):
-    kLeftWristRoll  = 19
-    kLeftWristPitch = 20
-    kLeftWristyaw   = 21
-    kRightWristRoll  = 26
-    kRightWristPitch = 27
-    kRightWristYaw   = 28
-
-class G1_29_JointWeakIndex(IntEnum):
-    kLeftAnklePitch    = 4
-    kRightAnklePitch   = 10
-    kLeftShoulderPitch = 15
-    kLeftShoulderRoll  = 16
-    kLeftShoulderYaw   = 17
-    kLeftElbow         = 18
-    kRightShoulderPitch = 22
-    kRightShoulderRoll  = 23
-    kRightShoulderYaw   = 24
-    kRightElbow         = 25
-
-class G1_29_JointIndex(IntEnum):
-    # Left leg
-    kLeftHipPitch   = 0
-    kLeftHipRoll    = 1
-    kLeftHipYaw     = 2
-    kLeftKnee       = 3
-    kLeftAnklePitch = 4
-    kLeftAnkleRoll  = 5
-    # Right leg
-    kRightHipPitch   = 6
-    kRightHipRoll    = 7
-    kRightHipYaw     = 8
-    kRightKnee       = 9
-    kRightAnklePitch = 10
-    kRightAnkleRoll  = 11
-    # Torso
-    kWaistYaw   = 12
-    kWaistRoll  = 13
-    kWaistPitch = 14
-    # Left arm
-    kLeftShoulderPitch = 15
-    kLeftShoulderRoll  = 16
-    kLeftShoulderYaw   = 17
-    kLeftElbow         = 18
-    kLeftWristRoll     = 19
-    kLeftWristPitch    = 20
-    kLeftWristyaw      = 21
-    # Right arm
-    kRightShoulderPitch = 22
-    kRightShoulderRoll  = 23
-    kRightShoulderYaw   = 24
-    kRightElbow         = 25
-    kRightWristRoll     = 26
-    kRightWristPitch    = 27
-    kRightWristYaw      = 28
-    # not used
-    kNotUsedJoint0 = 29
-    kNotUsedJoint1 = 30
-    kNotUsedJoint2 = 31
-    kNotUsedJoint3 = 32
-    kNotUsedJoint4 = 33
-    kNotUsedJoint5 = 34
-
-JOINT_NAMES_ROS = {
-    0: "left_hip_pitch_joint",   1: "left_hip_roll_joint",    2: "left_hip_yaw_joint",
-    3: "left_knee_joint",        4: "left_ankle_pitch_joint", 5: "left_ankle_roll_joint",
-    6: "right_hip_pitch_joint",  7: "right_hip_roll_joint",   8: "right_hip_yaw_joint",
-    9: "right_knee_joint",      10: "right_ankle_pitch_joint",11:"right_ankle_roll_joint",
-    12:"waist_yaw_joint",       13: "waist_roll_joint",      14:"waist_pitch_joint",
-    15:"left_shoulder_pitch_joint", 16:"left_shoulder_roll_joint", 17:"left_shoulder_yaw_joint",
-    18:"left_elbow_joint", 19:"left_wrist_roll_joint", 20:"left_wrist_pitch_joint", 21:"left_wrist_yaw_joint",
-    22:"right_shoulder_pitch_joint",23:"right_shoulder_roll_joint",24:"right_shoulder_yaw_joint",
-    25:"right_elbow_joint",26:"right_wrist_roll_joint",27:"right_wrist_pitch_joint",28:"right_wrist_yaw_joint",
-}
-
-JOINT_LIMITS_RAD = {
-    0: (-2.5307,  2.8798),  1: (-0.5236,  2.9671),  2: (-2.7576,  2.7576),
-    3: (-0.087267,2.8798),  4: (-0.87267, 0.5236),  5: (-0.2618,  0.2618),
-    6: (-2.5307,  2.8798),  7: (-2.9671,  0.5236),  8: (-2.7576,  2.7576),
-    9: (-0.087267,2.8798), 10:(-0.87267, 0.5236), 11:(-0.2618,  0.2618),
-    12:(-2.618,   2.618),  13:(-0.52,    0.52),   14:(-0.52,    0.52),
-    15:(-3.0892,  2.6704), 16:(-1.5882,  2.2515), 17:(-2.618,   2.618),
-    18:(-1.0472,  2.0944), 19:(-1.972222054, 1.972222054),
-    20:(-1.614429558, 1.614429558), 21:(-1.614429558, 1.614429558),
-    22:(-3.0892,  2.6704), 23:(-2.2515,  1.5882), 24:(-2.618,   2.618),
-    25:(-1.0472,  2.0944), 26:(-1.972222054, 1.972222054),
-    27:(-1.614429558, 1.614429558), 28:(-1.614429558, 1.614429558),
-}
-
-RIGHT_JOINT_INDICES_LIST = [22,23,24,25,26,27,28]
-LEFT_JOINT_INDICES_LIST  = [15,16,17,18,19,20,21]
-
-JOINT_GROUPS = {
-    "left":  LEFT_JOINT_INDICES_LIST,
-    "right": RIGHT_JOINT_INDICES_LIST,
-    "both":  LEFT_JOINT_INDICES_LIST + RIGHT_JOINT_INDICES_LIST,
-}
-
-JOINT_NAMES_LEFT = [
-    "L Shoulder Pitch", "L Shoulder Roll", "L Shoulder Yaw",
-    "L Elbow", "L Wrist Roll", "L Wrist Pitch", "L Wrist Yaw"
-]
-JOINT_NAMES_RIGHT = [
-    "R Shoulder Pitch", "R Shoulder Roll", "R Shoulder Yaw",
-    "R Elbow", "R Wrist Roll", "R Wrist Pitch", "R Wrist Yaw"
-]
+from g1pilot.utils.arm_gui import ArmGUI, UiBridge
 
 def _names_for(group):
     if group == "left":  return JOINT_NAMES_LEFT
     if group == "right": return JOINT_NAMES_RIGHT
     if group == "both":  return JOINT_NAMES_LEFT + JOINT_NAMES_RIGHT
     raise ValueError(f"Unknown group {group}")
+
+os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/runtime-root")
 
 JOINTID_TO_DUALINDEX = {}
 for i, jid in enumerate([
@@ -240,136 +92,6 @@ for i, jid in enumerate([
     G1_29_JointArmIndex.kRightWristYaw,
 ]):
     JOINTID_TO_DUALINDEX[jid.value] = i
-
-def clamp_joint_vector(q_vals, joint_id_list):
-    out = []
-    for ii, jidx in enumerate(joint_id_list):
-        lo, hi = JOINT_LIMITS_RAD[jidx]
-        out.append(float(np.clip(q_vals[ii], lo, hi)))
-    return np.array(out, dtype=float)
-
-# ------------------------------ UI ------------------------------
-class UiBridge(QtCore.QObject):
-    runSignal = QtCore.pyqtSignal(object)
-    def __init__(self):
-        super().__init__()
-        self.runSignal.connect(self._run)
-    @QtCore.pyqtSlot(object)
-    def _run(self, fn):
-        try:
-            fn()
-        except Exception as e:
-            print(f"[UiBridge] Error callable: {e}", flush=True)
-
-class ArmGUI(QtWidgets.QWidget):
-    valuesChanged = QtCore.pyqtSignal(object)
-
-    def __init__(self, title, joint_ids, joint_names, get_initial_q_radians_callable, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setMinimumWidth(720 if len(joint_ids) == 14 else 520)
-        self.joint_ids   = joint_ids[:]
-        self.joint_names = joint_names[:]
-
-        root = QtWidgets.QVBoxLayout(self)
-        self.setLayout(root)
-        columns = QtWidgets.QHBoxLayout()
-        root.addLayout(columns, stretch=1)
-        self.sliders = []; self.value_labels = []
-
-        init_q = get_initial_q_radians_callable() or [0.0]*len(self.joint_ids)
-        if len(init_q) != len(self.joint_ids):
-            init_q = [0.0]*len(self.joint_ids)
-        init_q = clamp_joint_vector(init_q, self.joint_ids)
-
-        def make_slider_row(name, jidx, deg0):
-            row = QtWidgets.QHBoxLayout()
-            lab = QtWidgets.QLabel(name); lab.setFixedWidth(180)
-            lo_rad, hi_rad = JOINT_LIMITS_RAD[jidx]
-            lo_deg = int(round(math.degrees(lo_rad))); hi_deg = int(round(math.degrees(hi_rad)))
-            sld = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-            sld.setMinimum(lo_deg); sld.setMaximum(hi_deg)
-            sld.setSingleStep(1); sld.setPageStep(5)
-            sld.setTickInterval(max(5, (hi_deg - lo_deg) // 12))
-            sld.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
-            deg0 = max(lo_deg, min(hi_deg, deg0)); sld.setValue(deg0)
-            val_lab = QtWidgets.QLabel(f"{deg0:>4}°"); val_lab.setFixedWidth(60)
-            return row, lab, sld, val_lab
-
-        if len(self.joint_ids) == 14:
-            left_ids  = LEFT_JOINT_INDICES_LIST; right_ids = RIGHT_JOINT_INDICES_LIST
-            left_names  = JOINT_NAMES_LEFT;      right_names = JOINT_NAMES_RIGHT
-            col_left  = QtWidgets.QVBoxLayout(); col_right = QtWidgets.QVBoxLayout()
-            columns.addLayout(col_left, 1); columns.addSpacing(16); columns.addLayout(col_right, 1)
-            left_title  = QtWidgets.QLabel("Left Arm");  right_title = QtWidgets.QLabel("Right Arm")
-            left_title.setStyleSheet("font-weight:600;"); right_title.setStyleSheet("font-weight:600;")
-            col_left.addWidget(left_title); col_right.addWidget(right_title)
-
-            for i, (name, jidx) in enumerate(zip(left_names, left_ids)):
-                deg0 = int(round(math.degrees(init_q[i])))
-                row, lab, sld, val_lab = make_slider_row(name, jidx, deg0)
-                sld.valueChanged.connect(lambda v, idx=i, vl=val_lab: self._on_slider(idx, v, vl))
-                row.addWidget(lab); row.addWidget(sld, 1); row.addWidget(val_lab)
-                col_left.addLayout(row); self.sliders.append(sld); self.value_labels.append(val_lab)
-            offset = 7
-            for k, (name, jidx) in enumerate(zip(right_names, right_ids)):
-                i = offset + k
-                deg0 = int(round(math.degrees(init_q[i])))
-                row, lab, sld, val_lab = make_slider_row(name, jidx, deg0)
-                sld.valueChanged.connect(lambda v, idx=i, vl=val_lab: self._on_slider(idx, v, vl))
-                row.addWidget(lab); row.addWidget(sld, 1); row.addWidget(val_lab)
-                col_right.addLayout(row); self.sliders.append(sld); self.value_labels.append(val_lab)
-        else:
-            single_col = QtWidgets.QVBoxLayout(); columns.addLayout(single_col, 1)
-            for i, (name, jidx) in enumerate(zip(self.joint_names, self.joint_ids)):
-                deg0 = int(round(math.degrees(init_q[i])))
-                row, lab, sld, val_lab = make_slider_row(name, jidx, deg0)
-                sld.valueChanged.connect(lambda v, idx=i, vl=val_lab: self._on_slider(idx, v, vl))
-                row.addWidget(lab); row.addWidget(sld, 1); row.addWidget(val_lab)
-                single_col.addLayout(row); self.sliders.append(sld); self.value_labels.append(val_lab)
-
-        btns = QtWidgets.QHBoxLayout()
-        btn_center = QtWidgets.QPushButton("Center (0°)")
-        btn_center.clicked.connect(self._center_all)
-        btns.addStretch(1); btns.addWidget(btn_center); root.addLayout(btns)
-
-    def _on_slider(self, idx, value_deg, val_label):
-        val_label.setText(f"{int(value_deg):>4}°")
-        vals_rad = []
-        for sld, jidx in zip(self.sliders, self.joint_ids):
-            lo_rad, hi_rad = JOINT_LIMITS_RAD[jidx]
-            rad = math.radians(sld.value()); vals_rad.append(float(np.clip(rad, lo_rad, hi_rad)))
-        self.valuesChanged.emit(vals_rad)
-
-    def _center_all(self):
-        for sld, jidx in zip(self.sliders, self.joint_ids):
-            lo_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][0])))
-            hi_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][1])))
-            center = 0 if lo_deg <= 0 <= hi_deg else int((lo_deg + hi_deg) / 2)
-            sld.setValue(center)
-
-    def update_from_robot_pose(self, q_rad_in_gui_order):
-        if not q_rad_in_gui_order or len(q_rad_in_gui_order) != len(self.joint_ids):
-            return
-        q_rad_in_gui_order = clamp_joint_vector(q_rad_in_gui_order, self.joint_ids)
-        for i, (val, jidx) in enumerate(zip(q_rad_in_gui_order, self.joint_ids)):
-            lo_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][0])))
-            hi_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][1])))
-            deg = int(round(math.degrees(val))); deg = max(lo_deg, min(hi_deg, deg))
-            self.sliders[i].blockSignals(True); self.sliders[i].setValue(deg)
-            self.value_labels[i].setText(f"{deg:>4}°"); self.sliders[i].blockSignals(False)
-
-class DataBuffer:
-    def __init__(self):
-        self.data = None
-        self.lock = threading.Lock()
-    def GetData(self):
-        with self.lock:
-            return self.data
-    def SetData(self, data):
-        with self.lock:
-            self.data = data
-
 
 class G1_29_ArmController:
     def __init__(self, ui_bridge: QtCore.QObject, controlled_arms: str = 'right',
