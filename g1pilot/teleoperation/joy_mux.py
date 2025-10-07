@@ -24,7 +24,7 @@ class JoyMux(Node):
         self.declare_parameter('auto_enable_topic','/g1pilot/auto_enable')
         self.declare_parameter('publish_rate',50.0)
         self.declare_parameter('lookahead',0.6)
-        self.declare_parameter('goal_tol',0.10)
+        self.declare_parameter('goal_tol',0.30)
         self.declare_parameter('vx_limit',0.5)
         self.declare_parameter('vy_limit',0.4)
         self.declare_parameter('wz_limit',0.4)
@@ -105,7 +105,7 @@ class JoyMux(Node):
         start_s = self.cumlen[idx]
         target_s = start_s + L
         j = idx
-        # <= en vez de <
+
         while j+1 < len(self.path) and self.cumlen[j] <= target_s:
             j += 1
         return self.path[j], j
@@ -142,16 +142,16 @@ class JoyMux(Node):
         seg_dir=self.segment_yaw(jidx)
         yaw_err=self.wrap(seg_dir - self.yaw)
         wz=clamp(self.yaw_kp*yaw_err,-self.wz_lim,self.wz_lim)
-        ax1=clamp(-vx_b,-0.8,0.8)
-        ax0=clamp(-vy_b,-0.8,0.8)
-        ax3=clamp(-wz/self.wz_lim,-0.8,0.8)
+        ax1=clamp(-vx_b,-0.1,0.1)
+        ax0=clamp(-vy_b,-0.1,0.1)
+        ax3=clamp(-wz/self.wz_lim,-0.1,0.1)
         out=Joy()
-        out.axes=[0.0]*8
-        out.buttons=[0]*8
+        out.axes=[0.0]*9
+        out.buttons=[0]*9
         out.axes[1]=ax1
         out.axes[0]=ax0
         out.axes[3]=ax3
-        out.buttons[7]=1
+        out.buttons[8]=1
         return out
 
     def loop(self):

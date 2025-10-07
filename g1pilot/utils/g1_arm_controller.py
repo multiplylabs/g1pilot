@@ -614,6 +614,28 @@ class G1_29_ArmController:
         self.publish_thread = threading.Thread(target=self._ctrl_motor_state, daemon=True)
         self.publish_thread.start()
 
+    def move_arms_to_home(self):
+        if not self.control_mode:
+            return
+        with self.ctrl_lock:
+            if not hasattr(self, "q_target") or len(self.q_target) != 14:
+                self.q_target = self.get_current_dual_arm_q().copy()
+            if self.controlled_arms in ("right", "both"):
+                right_home = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=float)
+                self.q_target[7:14] = right_home
+            if self.controlled_arms in ("left", "both"):
+                left_home = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=float)
+                self.q_target[0:7] = left_home
+        print("[ArmGUI] Moving arms to home position", flush=True)
+        time_start = time.time()
+        while time.time() - time_start < 5.0:
+            with self.ctrl_lock:
+                cur_q = self.get_current_dual_arm_q()
+                if np.all(np.abs(cur_q - self.q_target) < 0.05):
+                    break
+            time.sleep(0.05)
+        print("[ArmGUI] Move to home done", flush=True)
+
     def _get_gui_initial_q(self):
         try:
             with self.ctrl_lock:

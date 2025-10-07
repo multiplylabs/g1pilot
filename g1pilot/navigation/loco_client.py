@@ -143,84 +143,100 @@ class G1LocoClient(Node):
             self.log_once_attr("info", "Already balanced, no action taken.", "_already_balanced_notice_logged")
 
     def joystick_callback(self, msg: Joy):
-        if not self.prev_buttons:
-            self.prev_buttons = {i: 0 for i in range(len(msg.buttons))}
-        if not self.balanced:
-            self.log_once_attr("warn", "Robot is not balanced, cannot move.", "_warn_not_balanced_logged")
-        else:
-            self.clear_attr("_warn_not_balanced_logged")
-        if self.robot_stopped:
-            self.log_once_attr("warn", "Robot is stopped, cannot move.", "_warn_robot_stopped_logged")
-        else:
-            self.clear_attr("_warn_robot_stopped_logged")
+        try:
+            if not self.prev_buttons:
+                self.prev_buttons = {i: 0 for i in range(len(msg.buttons))}
+            if not self.balanced:
+                self.log_once_attr("warn", "Robot is not balanced, cannot move.", "_warn_not_balanced_logged")
+            else:
+                self.clear_attr("_warn_not_balanced_logged")
+            if self.robot_stopped:
+                self.log_once_attr("warn", "Robot is stopped, cannot move.", "_warn_robot_stopped_logged")
+            else:
+                self.clear_attr("_warn_robot_stopped_logged")
 
-        axis_last = msg.axes[-1] if len(msg.axes) else 0.0
-        if self.prev_axis_last is None:
+            axis_last = msg.axes[-1] if len(msg.axes) else 0.0
+            if self.prev_axis_last is None:
+                self.prev_axis_last = axis_last
+
+            # UP CHANGE FSM ID 4 (Standby)
+            if axis_last == -1.0 and self.prev_axis_last != -1.0:
+                if self.use_robot and self.robot is not None:
+                    self.robot.SetFsmId(4)
+                self.log_once_attr("info", "Switched to FSM ID 4 (Standby)", "_switch_fsm_id_4_logged")
+                self.robot_stopped = False
+                self.balanced = False
+            if axis_last != -1.0 and self.prev_axis_last == -1.0:
+                self.clear_attr("_switch_fsm_id_4_logged")
+
+            # X -> TOGGLE TO CONTROL THE ARMS
+            if msg.buttons[0] == 1 and self.prev_buttons[0] == 0:
+                self.control_arms = not self.control_arms
+                self.arm_control.set_control_mode(self.control_arms)
+                if self.control_arms:
+                    self.log_once_attr("info", "Enabling arm control mode.", "_enable_arm_control_logged")
+                else:
+                    self.log_once_attr("info", "Disabling arm control mode.", "_disable_arm_control_logged")
+
+            # 0 -> Move the arm to home position
+            if msg.buttons[1] == 1 and self.prev_buttons[1] == 0:
+                if self.control_arms:
+                    self.log_once_attr("info", "Moving arms to home position.", "_move_arms_home_logged")
+                    self.arm_control.move_arms_to_home()
+                else:
+                    self.log_once_attr("warn", "Cannot move arms to home, arm control mode is disabled.", "_warn_move_home_no_control_logged")
+
+            # L1 -> Emergency stop
+            if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:
+                self.log_once_attr("warn", "Emergency stop button pressed!", "_e_stop_button_pressed_logged")
+                self.robot_stopped = True
+                self.balanced = False
+                if self.use_robot and self.robot is not None:
+                    self.robot.Damp()
+                if self.control_arms:
+                    self.control_arms = False
+                    self.arm_control.set_control_mode(False)
+            if msg.buttons[5] == 0 and self.prev_buttons[5] == 1:
+                self.clear_attr("_e_stop_button_pressed_logged")
+
+            # R1 -> Balancing
+            if msg.buttons[6] == 1 and self.prev_buttons[6] == 0:
+                if not self.balanced:
+                    self.log_once_attr("info", "Starting balancing procedure...", "_start_balance_r1_logged")
+                    self.entering_balancing(max_height=0.5, step=0.02)
+                    self.log_once_attr("info", "Balancing procedure completed.", "_balance_completed_r1_logged")
+                else:
+                    self.log_once_attr("info", "Already balanced, no action taken.", "_already_balanced_notice_r1_logged")
+            if msg.buttons[6] == 0 and self.prev_buttons[6] == 1:
+                self.clear_attr("_start_balance_r1_logged")
+                self.clear_attr("_balance_completed_r1_logged")
+                self.clear_attr("_already_balanced_notice_r1_logged")
+
+            # R2 (hold) -> Move
+            if msg.buttons[8] == 0 and not self.robot_stopped and self.balanced:
+                if self.use_robot and self.robot is not None:
+                    self.robot.StopMove()
+
+            if msg.buttons[8] == 1 and not self.robot_stopped and self.balanced:
+                vx  = round(msg.axes[1] * 0.8 * -1, 2)
+                vy  = round(msg.axes[0] * 0.8 * -1, 2)
+                yaw = round(msg.axes[3] * 0.8 * 1, 2)
+                self.log_once_attr("info", f"Moving with vx: {vx}, vy: {vy}, yaw: {yaw}", "_moving_logged")
+                if self.use_robot and self.robot is not None:
+                    if abs(vx) < 0.03 and abs(vy) < 0.03 and abs(yaw) < 0.03:
+                        self.robot.StopMove()
+                    else:
+                        self.robot.Move(vx=vx, vy=vy, vyaw=yaw, continous_move=True)
+
+            self.prev_buttons = {i: msg.buttons[i] for i in range(len(msg.buttons))}
             self.prev_axis_last = axis_last
 
-        # UP CHANGE FSM ID 4 (Standby)
-        if axis_last == -1.0 and self.prev_axis_last != -1.0:
-            if self.use_robot and self.robot is not None:
-                self.robot.SetFsmId(4)
-            self.log_once_attr("info", "Switched to FSM ID 4 (Standby)", "_switch_fsm_id_4_logged")
-            self.robot_stopped = False
-            self.balanced = False
-        if axis_last != -1.0 and self.prev_axis_last == -1.0:
-            self.clear_attr("_switch_fsm_id_4_logged")
-
-        # X -> TOGGLE TO CONTROL THE ARMS
-        if msg.buttons[0] == 1 and self.prev_buttons[0] == 0:
-            self.control_arms = not self.control_arms
-            self.arm_control.set_control_mode(self.control_arms)
-            if self.control_arms:
-                self.log_once_attr("info", "Enabling arm control mode.", "_enable_arm_control_logged")
-            else:
-                self.log_once_attr("info", "Disabling arm control mode.", "_disable_arm_control_logged")
-
-        # L1 -> Emergency stop
-        if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:
-            self.log_once_attr("warn", "Emergency stop button pressed!", "_e_stop_button_pressed_logged")
+        except Exception as e:
+            self.get_logger().error(f"Error in joystick_callback: {e}")
+            self.robot.StopMove()
+            self.robot.Damp()
             self.robot_stopped = True
             self.balanced = False
-            if self.use_robot and self.robot is not None:
-                self.robot.Damp()
-            if self.control_arms:
-                self.control_arms = False
-                self.arm_control.set_control_mode(False)
-        if msg.buttons[5] == 0 and self.prev_buttons[5] == 1:
-            self.clear_attr("_e_stop_button_pressed_logged")
-
-        # R1 -> Balancing
-        if msg.buttons[6] == 1 and self.prev_buttons[6] == 0:
-            if not self.balanced:
-                self.log_once_attr("info", "Starting balancing procedure...", "_start_balance_r1_logged")
-                self.entering_balancing(max_height=0.5, step=0.02)
-                self.log_once_attr("info", "Balancing procedure completed.", "_balance_completed_r1_logged")
-            else:
-                self.log_once_attr("info", "Already balanced, no action taken.", "_already_balanced_notice_r1_logged")
-        if msg.buttons[6] == 0 and self.prev_buttons[6] == 1:
-            self.clear_attr("_start_balance_r1_logged")
-            self.clear_attr("_balance_completed_r1_logged")
-            self.clear_attr("_already_balanced_notice_r1_logged")
-
-        # R2 (hold) -> Move
-        if msg.buttons[8] == 0 and not self.robot_stopped and self.balanced:
-            if self.use_robot and self.robot is not None:
-                self.robot.StopMove()
-
-        if msg.buttons[8] == 1 and not self.robot_stopped and self.balanced:
-            vx  = round(msg.axes[1] * 0.8 * -1, 2)
-            vy  = round(msg.axes[0] * 0.8 * -1, 2)
-            yaw = round(msg.axes[3] * 0.8 * -1, 2)
-            self.log_once_attr("info", f"Moving with vx: {vx}, vy: {vy}, yaw: {yaw}", "_moving_logged")
-            if self.use_robot and self.robot is not None:
-                if abs(vx) < 0.03 and abs(vy) < 0.03 and abs(yaw) < 0.03:
-                    self.robot.StopMove()
-                else:
-                    self.robot.Move(vx=vx, vy=vy, vyaw=yaw, continous_move=True)
-
-        self.prev_buttons = {i: msg.buttons[i] for i in range(len(msg.buttons))}
-        self.prev_axis_last = axis_last
 
     # -------- Balancing --------
     def entering_balancing(self, max_height=0.5, step=0.02):
