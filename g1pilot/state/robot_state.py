@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
@@ -6,9 +8,7 @@ from rclpy.qos import QoSProfile
 from sensor_msgs.msg import JointState, Imu
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
-from geometry_msgs.msg import (
-    Pose, Twist, Point, PointStamped, Quaternion, TransformStamped
-)
+from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
 
 from astroviz_interfaces.msg import MotorState, MotorStateList
@@ -18,15 +18,21 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
 
+def quaternion_inverse(q):
+    """Inverse of a quaternion [w,x,y,z]."""
+    w, x, y, z = q
+    norm = w*w + x*x + y*y + z*z
+    return [w/norm, -x/norm, -y/norm, -z/norm]
+
 def quaternion_multiply(q1, q2):
-    """Multiplies two quaternions (w,x,y,z)."""
+    """Multiply two quaternions [w,x,y,z]."""
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
     return [
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
     ]
 
 
@@ -99,78 +105,95 @@ class RobotState(Node):
     def __init__(self):
         super().__init__('RobotState')
 
-        # --- Params
+        self.declare_parameter('use_robot', True)
+        self.declare_parameter('sim_rate_hz', 50.0)
         self.declare_parameter('interface', 'eth0')
+        self.declare_parameter('publish_joint_states', True)
+
+        self.use_robot = bool(self.get_parameter('use_robot').value)
+        self.sim_dt = 1.0 / float(self.get_parameter('sim_rate_hz').value)
         interface = self.get_parameter('interface').get_parameter_value().string_value
-        self.get_logger().info(f'Using interface: {interface}')
+        self.publish_joint_states = bool(self.get_parameter('publish_joint_states').value)
         self.ns = '/g1pilot'
 
-        # --- Unitree channel init
-        ChannelFactoryInitialize(0, interface)
+        self.get_logger().info(f'use_robot={self.use_robot}, publish_joint_states={self.publish_joint_states}')
+        if self.use_robot:
+            self.get_logger().info(f'Using interface: {interface}')
 
-        # --- Publishers
         qos_profile = QoSProfile(depth=10)
-        self.joint_pub = self.create_publisher(JointState, "/joint_states", qos_profile)
-        self.imu_publisher = self.create_publisher(Imu, f"{self.ns}/imu", qos_profile)
-        self.odometry_pub = self.create_publisher(Odometry, f"{self.ns}/odometry", qos_profile)
+        self.joint_pub       = self.create_publisher(JointState, "/joint_states", qos_profile)
+        self.imu_publisher   = self.create_publisher(Imu, f"{self.ns}/imu", qos_profile)
+        self.odometry_pub    = self.create_publisher(Odometry, f"{self.ns}/odometry", qos_profile)
         self.motor_state_pub = self.create_publisher(MotorStateList, f"{self.ns}/motor_state", qos_profile)
 
-        # TF broadcaster
+        self.initial_odometry = None
+        self.initial_quat = None
+
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # --- JointState setup
         self.joint_indices = sorted(_joint_index_to_ros_name.keys())
         self.joint_names = [_joint_index_to_ros_name[i] for i in self.joint_indices]
         self.joint_state_msg = JointState()
         self.joint_state_msg.name = self.joint_names
 
-        # --- Subscribers (LowState + Odom HF/LF)
-        self.subscriber_low_state = ChannelSubscriber("rt/lowstate", LowState_)
-        self.subscriber_low_state.Init(self.callback_lowstate)
+        if self.use_robot:
+            ChannelFactoryInitialize(0, interface)
+            self.subscriber_low_state = ChannelSubscriber("rt/lowstate", LowState_)
+            self.subscriber_low_state.Init(self.callback_lowstate)
 
-        self.subscriber_odom_hf = ChannelSubscriber("rt/odommodestate", SportModeState_)
-        self.subscriber_odom_hf.Init(self.callback_odometry_hf)
+            self.subscriber_odom_hf = ChannelSubscriber("rt/odommodestate", SportModeState_)
+            self.subscriber_odom_hf.Init(self.callback_odometry_hf)
+        else:
+            self.sim_timer = self.create_timer(self.sim_dt, self._sim_tick)
 
-    # === ODOMETRY callbacks ===
     def callback_odometry_hf(self, msg: SportModeState_):
-        self._publish_odometry_from_sport(msg, frame_id="odom", child_frame_id="base_link")
+        self._publish_odometry_from_sport(msg, frame_id="odom", child_frame_id="pelvis")
 
-
-    def _publish_odometry_from_sport(self, est: SportModeState_, frame_id: str = "odom", child_frame_id: str = "base_link"):
+    def _publish_odometry_from_sport(self, est: SportModeState_, frame_id: str = "odom", child_frame_id: str = "pelvis"):
         now = self.get_clock().now().to_msg()
 
-        # --- Odometry message ---
         odom = Odometry()
         odom.header.stamp = now
         odom.header.frame_id = frame_id
         odom.child_frame_id = child_frame_id
 
-        # Pose
-        odom.pose.pose.position.x = float(est.position[0])
-        odom.pose.pose.position.y = float(est.position[1])
+        q = [
+            float(est.imu_state.quaternion[0]),
+            float(est.imu_state.quaternion[1]),
+            float(est.imu_state.quaternion[2]),
+            float(est.imu_state.quaternion[3])
+        ]
+
+        if self.initial_odometry is None:
+            self.initial_odometry = [
+                float(est.position[0]),
+                float(est.position[1]),
+                float(est.position[2]),
+            ]
+
+        if self.initial_quat is None:
+            self.initial_quat = q
+
+        q_rel = quaternion_multiply(q, quaternion_inverse(self.initial_quat))
+
+        odom.pose.pose.position.x = float(est.position[0]) - self.initial_odometry[0]
+        odom.pose.pose.position.y = float(est.position[1]) - self.initial_odometry[1]
         odom.pose.pose.position.z = float(est.position[2])
 
-        # Unitree quaternion is [w,x,y,z] -> ROS is x,y,z,w
-        qw = float(est.imu_state.quaternion[0])
-        qx = float(est.imu_state.quaternion[1])
-        qy = float(est.imu_state.quaternion[2])
-        qz = float(est.imu_state.quaternion[3])
-        odom.pose.pose.orientation.x = qx
-        odom.pose.pose.orientation.y = qy
-        odom.pose.pose.orientation.z = qz
-        odom.pose.pose.orientation.w = qw
+        odom.pose.pose.orientation.x = q_rel[1]
+        odom.pose.pose.orientation.y = q_rel[2]
+        odom.pose.pose.orientation.z = q_rel[3]
+        odom.pose.pose.orientation.w = q_rel[0]
 
-        # Pose covariance (36 floats)
         pose_cov = [0.0] * 36
-        pose_cov[0]  = 0.05   # var(x)
-        pose_cov[7]  = 0.05   # var(y)
-        pose_cov[14] = 0.10   # var(z)
-        pose_cov[21] = 0.20   # var(roll)
-        pose_cov[28] = 0.20   # var(pitch)
-        pose_cov[35] = 0.20   # var(yaw)
+        pose_cov[0]  = 0.05
+        pose_cov[7]  = 0.05
+        pose_cov[14] = 0.10
+        pose_cov[21] = 0.20
+        pose_cov[28] = 0.20
+        pose_cov[35] = 0.20
         odom.pose.covariance = pose_cov
 
-        # Twist (linear from est.velocity; angular: only yaw_speed available)
         odom.twist.twist.linear.x = float(est.velocity[0])
         odom.twist.twist.linear.y = float(est.velocity[1])
         odom.twist.twist.linear.z = float(est.velocity[2])
@@ -189,7 +212,6 @@ class RobotState(Node):
 
         self.odometry_pub.publish(odom)
 
-        # --- TF: odom -> base_link ---
         t = TransformStamped()
         t.header.stamp = now
         t.header.frame_id = frame_id
@@ -200,15 +222,12 @@ class RobotState(Node):
         t.transform.rotation = odom.pose.pose.orientation
         self.tf_broadcaster.sendTransform(t)
 
-    # === LOWSTATE callback (IMU + joints + motors) ===
     def callback_lowstate(self, msg: LowState_):
-        # --- IMU message ---
         imu_msg = Imu()
         imu_msg.header = Header()
         imu_msg.header.stamp = self.get_clock().now().to_msg()
         imu_msg.header.frame_id = "imu_link"
 
-        # Unitree quaternion [w,x,y,z] -> ROS (x,y,z,w)
         qw = float(msg.imu_state.quaternion[0])
         qx = float(msg.imu_state.quaternion[1])
         qy = float(msg.imu_state.quaternion[2])
@@ -226,16 +245,18 @@ class RobotState(Node):
         imu_msg.linear_acceleration.z = float(msg.imu_state.accelerometer[2])
         self.imu_publisher.publish(imu_msg)
 
-        # --- Motors + JointState ---
         posiciones = []
         motor_list_msg = MotorStateList()
         for idx in self.joint_indices:
             if idx < len(msg.motor_state):
                 motor_state = MotorState()
                 motor_state.name = _joint_index_to_ros_name[idx]
-                # Some firmwares provide temperature as array; index 0 used here
-                motor_state.temperature = float(getattr(msg.motor_state[idx].temperature, "__getitem__", lambda i: msg.motor_state[idx].temperature)(0)) if hasattr(msg.motor_state[idx].temperature, "__len__") else float(msg.motor_state[idx].temperature)
-                motor_state.voltage = float(msg.motor_state[idx].vol)
+                temp_field = msg.motor_state[idx].temperature
+                if hasattr(temp_field, "__len__"):
+                    motor_state.temperature = float(temp_field[0])
+                else:
+                    motor_state.temperature = float(temp_field)
+                motor_state.voltage  = float(msg.motor_state[idx].vol)
                 motor_state.position = float(msg.motor_state[idx].q)
                 motor_state.velocity = float(msg.motor_state[idx].dq)
                 motor_list_msg.motor_list.append(motor_state)
@@ -252,9 +273,61 @@ class RobotState(Node):
                 f"Positions ({len(posiciones)}) do not match joint names ({len(self.joint_state_msg.name)}). Not publishing.")
             return
 
-        self.joint_state_msg.header.stamp = self.get_clock().now().to_msg()
-        self.joint_state_msg.position = posiciones
-        self.joint_pub.publish(self.joint_state_msg)
+        if self.publish_joint_states:
+            self.joint_state_msg.header.stamp = self.get_clock().now().to_msg()
+            self.joint_state_msg.position = posiciones
+            self.joint_pub.publish(self.joint_state_msg)
+
+    def _sim_tick(self):
+        now = self.get_clock().now().to_msg()
+
+        odom = Odometry()
+        odom.header.stamp = now
+        odom.header.frame_id = "odom"
+        odom.child_frame_id = "pelvis"
+        odom.pose.pose.position.x = 0.0
+        odom.pose.pose.position.y = 0.0
+        odom.pose.pose.position.z = 0.0
+        odom.pose.pose.orientation.x = 0.0
+        odom.pose.pose.orientation.y = 0.0
+        odom.pose.pose.orientation.z = 0.0
+        odom.pose.pose.orientation.w = 1.0
+        self.odometry_pub.publish(odom)
+
+        t = TransformStamped()
+        t.header.stamp = now
+        t.header.frame_id = "odom"
+        t.child_frame_id = "pelvis"
+        t.transform.translation.x = 0.0
+        t.transform.translation.y = 0.0
+        t.transform.translation.z = 0.0
+        t.transform.rotation = odom.pose.pose.orientation
+        self.tf_broadcaster.sendTransform(t)
+
+        imu_msg = Imu()
+        imu_msg.header = Header()
+        imu_msg.header.stamp = now
+        imu_msg.header.frame_id = "imu_link"
+        imu_msg.orientation.w = 1.0
+        self.imu_publisher.publish(imu_msg)
+
+        if self.publish_joint_states:
+            js = JointState()
+            js.header.stamp = now
+            js.name = self.joint_names
+            js.position = [0.0] * len(self.joint_names)
+            self.joint_pub.publish(js)
+
+        mlist = MotorStateList()
+        for idx in self.joint_indices:
+            m = MotorState()
+            m.name = _joint_index_to_ros_name[idx]
+            m.temperature = 0.0
+            m.voltage = 0.0
+            m.position = 0.0
+            m.velocity = 0.0
+            mlist.motor_list.append(m)
+        self.motor_state_pub.publish(mlist)
 
 
 def main(args=None):

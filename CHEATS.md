@@ -1,23 +1,25 @@
 ## CHEATS:
 
+###  PUBLISH GOAL
+```bash
+ros2 topic pub /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_id: 'odom'}, point: {x: 1.1, y: 0.6, z: 0.0}}"
+```
+
+### PUBLISH JOY
+```bash
+ros2 topic pub --once /g1pilot/joy sensor_msgs/msg/Joy '{header: {stamp: {sec: 0, nanosec: 0}, frame_id: ""}, axes: [0,0,0,0,0,0,0,0], buttons: [1,0,0,0,0,0,0,0,0,0,0,0]}'
+```
+
 ### STANDARD SEQUENCE FOR UNITREE ROBOT
 ```bash
-1.- Damp → joints relaxed so you can align the feet.
+1.- Put the battery and turn on the robot
 ```
 ```bash
-2.- Stand-up (FSM 4) → robot’s internal routine extends legs part-way.
+2.- ros2 launch g1pilot robot_state_launcher.launch.py use_robot:=False publish_joint_states:=False interface:=eth0
 ```
 ```bash
-3.- Increment SetStandHeight in small steps until mode flips 2 → 0.
-This is the height at which the robot will stand.
+3.- ros2 launch g1pilot navigation_launcher.launch.py use_robot:=False interface:=eth0 arm_controlled:='both' enable_arm_ui:=True ik_use_waist:=False
 ```
 ```bash
-4.- BalanceStand(0) (or SetBalanceMode(0)).
-This engages the balance mode, allowing the robot to adjust its posture.
-```
-```bash
-5.- Re-send the final SetStandHeight now that balance is engaged.
-```
-```bash
-6.- Optionally enable continuous gait (SetBalanceMode(1)) and finally Start (FSM 200) to walk.
+4.- ros2 run g1pilot interactive_marker 
 ```

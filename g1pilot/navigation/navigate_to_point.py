@@ -20,14 +20,14 @@ class Nav2Point(Node):
         self.declare_parameter('publish_rate', 50.0)
         self.declare_parameter('pos_kp', 0.8)
         self.declare_parameter('yaw_kp', 1.5)
-        self.declare_parameter('waypoint_tolerance', 0.15)
-        self.declare_parameter('goal_tolerance', 0.10)
+        self.declare_parameter('waypoint_tolerance', 0.20)
+        self.declare_parameter('goal_tolerance', 0.20)
         self.declare_parameter('frame_id', 'world')
         self.declare_parameter('joy_topic', '/g1pilot/auto_joy')
         self.declare_parameter('path_topic', '/g1pilot/path')
-        self.declare_parameter('vx_limit', 0.5)
-        self.declare_parameter('vy_limit', 0.4)
-        self.declare_parameter('wz_limit', 0.4)
+        self.declare_parameter('vx_limit', 0.6)
+        self.declare_parameter('vy_limit', 0.6)
+        self.declare_parameter('wz_limit', 0.5)
         self.rate = self.get_parameter('publish_rate').value
         self.pos_kp = self.get_parameter('pos_kp').value
         self.yaw_kp = self.get_parameter('yaw_kp').value
@@ -69,7 +69,6 @@ class Nav2Point(Node):
         self.path_frame = msg.header.frame_id if msg.header.frame_id else self.frame_id
         self.idx = 0
         if self.path:
-            print(f"Received path with {len(self.path)} waypoints in frame '{self.path_frame}'")
             self.publish_goal_marker(self.path[-1][0], self.path[-1][1])
 
     def publish_goal_marker(self, gx, gy):

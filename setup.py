@@ -21,7 +21,6 @@ setup(
         # Launch Files
         (f'share/{package_name}/launch', [
             'launch/robot_state_launcher.launch.py',
-            'launch/controller_launcher.launch.py',
             'launch/teleoperation_launcher.launch.py',
             'launch/navigation_launcher.launch.py'
         ]),
@@ -45,7 +44,7 @@ setup(
     zip_safe=True,
     maintainer='Clemente Donoso',
     maintainer_email='clemente.donoso@inria.fr',
-    description='ROS 2 package for Dynamixel 6-DOF input control',
+    description='ROS 2 package to control the G1 robot',
     license='BSD 3',
     tests_require=['pytest'],
     entry_points={
@@ -53,10 +52,9 @@ setup(
             # States Nodes
             'robot_state = g1pilot.state.robot_state:main',
             'state_publisher_29dof = g1pilot.state.state_publisher_29dof:main',
+            'camera_pointcloud = g1pilot.state.camera_pointcloud:main',
 
             # Controllers Nodes
-            'cartesian_controller = g1pilot.cartesian_controller:main',
-            'joint_controller = g1pilot.controller.joint_controller:main',
             'interactive_marker = g1pilot.controller.interactive_marker:main',
 
             # Teleoperation Nodes
@@ -67,7 +65,7 @@ setup(
             'loco_client = g1pilot.navigation.loco_client:main',
             'dijkstra_planner = g1pilot.navigation.dijkstra_planner:main',
             'nav2point = g1pilot.navigation.navigate_to_point:main',
-            'dummy_map = g1pilot.navigation.create_map:main'
+            'create_map = g1pilot.navigation.create_map:main'
         ],
     },
 )

@@ -45,17 +45,27 @@ G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. It ex
 
 ## Quick Start
 ### Docker (recommended)
-We prepare a docker image to build the package. You can use the following command to build the package, go the `docker` folder and run the following command:
+We prepare two docker images to build and run the package. One is for building in the laptop, and the other is for running in the robot. Both images
+are located in the `docker` folder. You can build and run the images with the provided scripts.
+To build the docker image in the laptop, run the following command:
+  ```bash
+  sh build.sh
+  ```
 
-```bash
-sh build.sh
-```
+To build the docker image in the robot, run the following command:
+  ```bash
+  sh build_camera.sh
+  ```
 
-Then, you can run the docker image with the following command:
+Then, you can run the docker image in the laptop with the following command:
+  ```bash
+  sh run.sh
+  ```
 
-```bash
-sh run.sh
-```
+To run the docker image in the robot with the following command:
+  ```bash
+  sh run_camera.sh
+  ```
 
 ### Package Layout
 
@@ -72,17 +82,6 @@ sh run.sh
 ## 🧠 Nodes Overview
 
 **G1Pilot** provides multiple ROS2 nodes to control and monitor the Unitree G1 robot.  
-
-### 1️⃣ Cartesian Controller (`cartesian_controller`)  
-- 🎯 **Purpose:** Controls the **right arm end-effector** of the robot.  
-- 🔄 **Behavior:** Sends high-level Cartesian commands that are converted into joint movements via the **Joint Controller**.  
-- 🛠️ **Use case:** Ideal for precise end-effector manipulation in Cartesian space.  
-
-### 2️⃣ Joint Controller (`joint_controller`)  
-- 🎯 **Purpose:** Directly controls the robot’s individual joints.  
-- 🔄 **Behavior:** Receives low-level joint commands and sends them to the robot hardware for execution.  
-- 🛠️ **Use case:** Required for fine-grained motion control and as a backend for Cartesian control.  
-
 ### 3️⃣ Interactive Marker (`interactive_marker`)  
 - 🎯 **Purpose:** Publishes a **movable marker in RViz** to interactively control the robot’s end-effector.  
 - 🛠️ **Use case:** Intuitive GUI control of the robot without manual command-line inputs.  
@@ -100,7 +99,6 @@ sh run.sh
 
 ### 6️⃣ Joystick (`joystick`)  
 - 🎯 **Purpose:** Integrates a **game controller (joystick)** to manually control the robot.  
-- 🛠️ **Use case:** Remote teleoperation for research or demonstrations.  
 
 #### **Basic Controls**
 - **L1** → Emergency Stop → The robot enters **Damp Mode** (safe state).
@@ -108,13 +106,16 @@ sh run.sh
 - **R1** → Activates **Balance Mode**.
 - **Left Joystick** → Controls **linear movements** (forward, backward, sideways).
 - **Right Joystick** → Controls **angular rotation** (turning).
+- **Triangle (Toggle)** → Enables/Disables goal navigation mode.
+- **X (Toggle)** → Enables/Disables arm control mode.
+- **Circle** → Resets the arm to the default position (only in arm control mode).
 
 ## Usage
 Once you have the docker image running, you can run the following command to start the unitree node:
 
 ```bash
 colcon build --symlink-install --packages-select g1pilot g1pilot
-````
+```
 
 Then, source the workspace:
 
@@ -124,12 +125,11 @@ source install/setup.bash
 To visualize the real robot in RViz, you can run the following command:
 
 ```bash
-ros2 launch g1pilot robot_state_launcher.launch.py
+ros2 launch g1pilot rviz_launcher.launch.py
 ```
 
-To control the robot, using the joint controller or the cartesian controller, you can run the following command:
 ```bash
-ros2 launch g1pilot controller_launcher.launch.py
+ros2 launch g1pilot robot_state_launcher.launch.py
 ```
 
 To teleoperate the robot using the joystick, you can run the following command:
@@ -140,6 +140,11 @@ ros2 launch g1pilot teleoperation_launcher.launch.py
 To apply autonomous navigation, you can run the following command:
 ```bash
 ros2 launch g1pilot navigation_launcher.launch.py
+```
+
+  To run the depth camera on the robot, you can run the following command:
+```bash
+ros2 launch realsense2_camera rs_launch.py depth_module.depth_profile:=1280x720x30 pointcloud.enable:=true
 ```
 
 ## Contributing

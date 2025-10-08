@@ -14,4 +14,4 @@ docker run \
         -v `pwd`/../config/livox_mid.json:/ros2_ws/src/livox_ros_driver2/config/MID360_config.json  \
         -w /ros2_ws \
         --group-add video \
-        g1pilot:latest
+        g1pilot_camera:latest
