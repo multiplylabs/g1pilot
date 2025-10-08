@@ -22,7 +22,8 @@ setup(
         (f'share/{package_name}/launch', [
             'launch/robot_state_launcher.launch.py',
             'launch/teleoperation_launcher.launch.py',
-            'launch/navigation_launcher.launch.py'
+            'launch/navigation_launcher.launch.py',
+            'launch/mola_launcher.launch.py',
         ]),
 
         # URDF / XML
