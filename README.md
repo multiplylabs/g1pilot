@@ -147,6 +147,11 @@ ros2 launch g1pilot navigation_launcher.launch.py
 ros2 launch realsense2_camera rs_launch.py depth_module.depth_profile:=1280x720x30 pointcloud.enable:=true
 ```
 
+To run the MOLA Odometry, you can run the following command:
+```bash
+ros2 launch g1pilot mola_launcher.launch.py
+```
+
 ## Contributing
 We welcome contributions to **G1Pilot**! If you have suggestions, improvements, or bug fixes, please follow these steps:
 

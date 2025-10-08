@@ -58,6 +58,12 @@ RUN apt install -y python3-gi gstreamer1.0-tools \
 
 RUN pip install --upgrade pyrealsense2 numpy opencv-python
 
+##### MOLA packages
+RUN apt install -y \
+ ros-${ROS_DISTRO}-mola \
+ ros-${ROS_DISTRO}-mola-state-estimation \
+ ros-${ROS_DISTRO}-mola-lidar-odometry
+
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc && \
     echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc
 

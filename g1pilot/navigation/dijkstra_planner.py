@@ -43,7 +43,7 @@ class DijkstraPlannerSmooth(Node):
     def __init__(self):
         super().__init__('dijkstra_planner_smooth')
         self.declare_parameter('map_topic','/map')
-        self.declare_parameter('odom_topic','/g1pilot/odometry')
+        self.declare_parameter('odom_topic','/lidar_odometry/pose')
         self.declare_parameter('goal_topic','/g1pilot/goal')
         self.declare_parameter('path_topic','/g1pilot/path')
         self.declare_parameter('occ_threshold',50)
