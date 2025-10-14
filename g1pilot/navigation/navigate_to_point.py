@@ -40,7 +40,7 @@ class Nav2Point(Node):
         self.vy_lim = self.get_parameter('vy_limit').value
         self.wz_lim = self.get_parameter('wz_limit').value
         qos = QoSProfile(depth=10)
-        self.sub_odom = self.create_subscription(Odometry, '/g1pilot/odometry', self.cb_odom, qos)
+        self.sub_odom = self.create_subscription(Odometry, '/lidar_odometry/pose_fixed', self.cb_odom, qos)
         self.sub_path = self.create_subscription(Path, self.path_topic, self.cb_path, qos)
         self.pub_joy = self.create_publisher(Joy, self.joy_topic, qos)
         self.pub_wp_marker = self.create_publisher(Marker, '/g1pilot/waypoint_marker', qos)

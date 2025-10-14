@@ -49,6 +49,24 @@ def generate_launch_description():
         ),
 
         Node(
+            package='g1pilot',
+            executable='camera_pointcloud',
+            name='camera_pointcloud',
+            parameters=[{
+            }],
+            output='screen'
+        ),
+
+        Node(
+            package='g1pilot',
+            executable='mola_fixed',
+            name='mola_fixed',
+            parameters=[{
+            }],
+            output='screen'
+        ),
+
+        Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='mid360_to_livox_tf',
@@ -58,8 +76,15 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
+            name='d435_to_camera_link',
+            arguments=['0','0','0','0','0','0','d435_link','camera_link']
+        ),
+
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
             name='world_to_odom_tf',
-            arguments=['0','0','0','0','0','0','odom','world']
+            arguments=['0','0','0','0','0','0','world','odom']
         ),
 
         Node(
