@@ -6,7 +6,6 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile
 
 from sensor_msgs.msg import JointState, Imu
-from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
@@ -15,89 +14,70 @@ from astroviz_interfaces.msg import MotorState, MotorStateList
 
 from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
-
-
-def quaternion_inverse(q):
-    """Inverse of a quaternion [w,x,y,z]."""
-    w, x, y, z = q
-    norm = w*w + x*x + y*y + z*z
-    return [w/norm, -x/norm, -y/norm, -z/norm]
-
-def quaternion_multiply(q1, q2):
-    """Multiply two quaternions [w,x,y,z]."""
-    w1, x1, y1, z1 = q1
-    w2, x2, y2, z2 = q2
-    return [
-        w1*w2 - x1*x2 - y1*y2 - z1*z2,
-        w1*x2 + x1*w2 + y1*z2 - z1*y2,
-        w1*y2 - x1*z2 + y1*w2 + z1*x2,
-        w1*z2 + x1*y2 - y1*x2 + z1*w2
-    ]
 
 
 class G1JointIndex:
-    LeftHipPitch     = 0
-    LeftHipRoll      = 1
-    LeftHipYaw       = 2
-    LeftKnee         = 3
-    LeftAnklePitch   = 4
-    LeftAnkleRoll    = 5
-    RightHipPitch    = 6
-    RightHipRoll     = 7
-    RightHipYaw      = 8
-    RightKnee        = 9
-    RightAnklePitch  = 10
-    RightAnkleRoll   = 11
-    WaistYaw         = 12
-    WaistRoll        = 13
-    WaistPitch       = 14
-    LeftShoulderPitch  = 15
-    LeftShoulderRoll   = 16
-    LeftShoulderYaw    = 17
-    LeftElbow          = 18
-    LeftWristRoll      = 19
-    LeftWristPitch     = 20
-    LeftWristYaw       = 21
+    LeftHipPitch = 0
+    LeftHipRoll = 1
+    LeftHipYaw = 2
+    LeftKnee = 3
+    LeftAnklePitch = 4
+    LeftAnkleRoll = 5
+    RightHipPitch = 6
+    RightHipRoll = 7
+    RightHipYaw = 8
+    RightKnee = 9
+    RightAnklePitch = 10
+    RightAnkleRoll = 11
+    WaistYaw = 12
+    WaistRoll = 13
+    WaistPitch = 14
+    LeftShoulderPitch = 15
+    LeftShoulderRoll = 16
+    LeftShoulderYaw = 17
+    LeftElbow = 18
+    LeftWristRoll = 19
+    LeftWristPitch = 20
+    LeftWristYaw = 21
     RightShoulderPitch = 22
-    RightShoulderRoll  = 23
-    RightShoulderYaw   = 24
-    RightElbow         = 25
-    RightWristRoll     = 26
-    RightWristPitch    = 27
-    RightWristYaw      = 28
+    RightShoulderRoll = 23
+    RightShoulderYaw = 24
+    RightElbow = 25
+    RightWristRoll = 26
+    RightWristPitch = 27
+    RightWristYaw = 28
 
 
 _joint_index_to_ros_name = {
-    G1JointIndex.LeftHipPitch:      "left_hip_pitch_joint",
-    G1JointIndex.LeftHipRoll:       "left_hip_roll_joint",
-    G1JointIndex.LeftHipYaw:        "left_hip_yaw_joint",
-    G1JointIndex.LeftKnee:          "left_knee_joint",
-    G1JointIndex.LeftAnklePitch:    "left_ankle_pitch_joint",
-    G1JointIndex.LeftAnkleRoll:     "left_ankle_roll_joint",
-    G1JointIndex.RightHipPitch:     "right_hip_pitch_joint",
-    G1JointIndex.RightHipRoll:      "right_hip_roll_joint",
-    G1JointIndex.RightHipYaw:       "right_hip_yaw_joint",
-    G1JointIndex.RightKnee:         "right_knee_joint",
-    G1JointIndex.RightAnklePitch:   "right_ankle_pitch_joint",
-    G1JointIndex.RightAnkleRoll:    "right_ankle_roll_joint",
-    G1JointIndex.WaistYaw:          "waist_yaw_joint",
-    G1JointIndex.WaistRoll:         "waist_roll_joint",
-    G1JointIndex.WaistPitch:        "waist_pitch_joint",
+    G1JointIndex.LeftHipPitch: "left_hip_pitch_joint",
+    G1JointIndex.LeftHipRoll: "left_hip_roll_joint",
+    G1JointIndex.LeftHipYaw: "left_hip_yaw_joint",
+    G1JointIndex.LeftKnee: "left_knee_joint",
+    G1JointIndex.LeftAnklePitch: "left_ankle_pitch_joint",
+    G1JointIndex.LeftAnkleRoll: "left_ankle_roll_joint",
+    G1JointIndex.RightHipPitch: "right_hip_pitch_joint",
+    G1JointIndex.RightHipRoll: "right_hip_roll_joint",
+    G1JointIndex.RightHipYaw: "right_hip_yaw_joint",
+    G1JointIndex.RightKnee: "right_knee_joint",
+    G1JointIndex.RightAnklePitch: "right_ankle_pitch_joint",
+    G1JointIndex.RightAnkleRoll: "right_ankle_roll_joint",
+    G1JointIndex.WaistYaw: "waist_yaw_joint",
+    G1JointIndex.WaistRoll: "waist_roll_joint",
+    G1JointIndex.WaistPitch: "waist_pitch_joint",
     G1JointIndex.LeftShoulderPitch: "left_shoulder_pitch_joint",
-    G1JointIndex.LeftShoulderRoll:  "left_shoulder_roll_joint",
-    G1JointIndex.LeftShoulderYaw:   "left_shoulder_yaw_joint",
-    G1JointIndex.LeftElbow:         "left_elbow_joint",
-    G1JointIndex.LeftWristRoll:     "left_wrist_roll_joint",
-    G1JointIndex.LeftWristPitch:    "left_wrist_pitch_joint",
-    G1JointIndex.LeftWristYaw:      "left_wrist_yaw_joint",
-    G1JointIndex.RightShoulderPitch:"right_shoulder_pitch_joint",
+    G1JointIndex.LeftShoulderRoll: "left_shoulder_roll_joint",
+    G1JointIndex.LeftShoulderYaw: "left_shoulder_yaw_joint",
+    G1JointIndex.LeftElbow: "left_elbow_joint",
+    G1JointIndex.LeftWristRoll: "left_wrist_roll_joint",
+    G1JointIndex.LeftWristPitch: "left_wrist_pitch_joint",
+    G1JointIndex.LeftWristYaw: "left_wrist_yaw_joint",
+    G1JointIndex.RightShoulderPitch: "right_shoulder_pitch_joint",
     G1JointIndex.RightShoulderRoll: "right_shoulder_roll_joint",
-    G1JointIndex.RightShoulderYaw:  "right_shoulder_yaw_joint",
-    G1JointIndex.RightElbow:        "right_elbow_joint",
-    G1JointIndex.RightWristRoll:    "right_wrist_roll_joint",
-    G1JointIndex.RightWristPitch:   "right_wrist_pitch_joint",
-    G1JointIndex.RightWristYaw:     "right_wrist_yaw_joint",
+    G1JointIndex.RightShoulderYaw: "right_shoulder_yaw_joint",
+    G1JointIndex.RightElbow: "right_elbow_joint",
+    G1JointIndex.RightWristRoll: "right_wrist_roll_joint",
+    G1JointIndex.RightWristPitch: "right_wrist_pitch_joint",
+    G1JointIndex.RightWristYaw: "right_wrist_yaw_joint",
 }
 
 
@@ -106,29 +86,18 @@ class RobotState(Node):
         super().__init__('RobotState')
 
         self.declare_parameter('use_robot', True)
-        self.declare_parameter('sim_rate_hz', 50.0)
         self.declare_parameter('interface', 'eth0')
         self.declare_parameter('publish_joint_states', True)
 
         self.use_robot = bool(self.get_parameter('use_robot').value)
-        self.sim_dt = 1.0 / float(self.get_parameter('sim_rate_hz').value)
         interface = self.get_parameter('interface').get_parameter_value().string_value
         self.publish_joint_states = bool(self.get_parameter('publish_joint_states').value)
         self.ns = '/g1pilot'
 
-        self.get_logger().info(f'use_robot={self.use_robot}, publish_joint_states={self.publish_joint_states}')
-        if self.use_robot:
-            self.get_logger().info(f'Using interface: {interface}')
-
         qos_profile = QoSProfile(depth=10)
-        self.joint_pub       = self.create_publisher(JointState, "/joint_states", qos_profile)
-        self.imu_publisher   = self.create_publisher(Imu, f"{self.ns}/imu", qos_profile)
-        self.odometry_pub    = self.create_publisher(Odometry, f"{self.ns}/odometry", qos_profile)
+        self.joint_pub = self.create_publisher(JointState, "/joint_states", qos_profile)
+        self.imu_pub = self.create_publisher(Imu, f"{self.ns}/imu", qos_profile)
         self.motor_state_pub = self.create_publisher(MotorStateList, f"{self.ns}/motor_state", qos_profile)
-
-        self.initial_odometry = None
-        self.initial_quat = None
-
         self.tf_broadcaster = TransformBroadcaster(self)
 
         self.joint_indices = sorted(_joint_index_to_ros_name.keys())
@@ -140,194 +109,75 @@ class RobotState(Node):
             ChannelFactoryInitialize(0, interface)
             self.subscriber_low_state = ChannelSubscriber("rt/lowstate", LowState_)
             self.subscriber_low_state.Init(self.callback_lowstate)
-
-            self.subscriber_odom_hf = ChannelSubscriber("rt/odommodestate", SportModeState_)
-            self.subscriber_odom_hf.Init(self.callback_odometry_hf)
         else:
-            self.sim_timer = self.create_timer(self.sim_dt, self._sim_tick)
-
-    def callback_odometry_hf(self, msg: SportModeState_):
-        self._publish_odometry_from_sport(msg, frame_id="odom", child_frame_id="pelvis")
-
-    def _publish_odometry_from_sport(self, est: SportModeState_, frame_id: str = "odom", child_frame_id: str = "pelvis"):
-        now = self.get_clock().now().to_msg()
-
-        odom = Odometry()
-        odom.header.stamp = now
-        odom.header.frame_id = frame_id
-        odom.child_frame_id = child_frame_id
-
-        q = [
-            float(est.imu_state.quaternion[0]),
-            float(est.imu_state.quaternion[1]),
-            float(est.imu_state.quaternion[2]),
-            float(est.imu_state.quaternion[3])
-        ]
-
-        if self.initial_odometry is None:
-            self.initial_odometry = [
-                float(est.position[0]),
-                float(est.position[1]),
-                float(est.position[2]),
-            ]
-
-        if self.initial_quat is None:
-            self.initial_quat = q
-
-        q_rel = quaternion_multiply(q, quaternion_inverse(self.initial_quat))
-
-        odom.pose.pose.position.x = float(est.position[0]) - self.initial_odometry[0]
-        odom.pose.pose.position.y = float(est.position[1]) - self.initial_odometry[1]
-        odom.pose.pose.position.z = float(est.position[2])
-
-        odom.pose.pose.orientation.x = q_rel[1]
-        odom.pose.pose.orientation.y = q_rel[2]
-        odom.pose.pose.orientation.z = q_rel[3]
-        odom.pose.pose.orientation.w = q_rel[0]
-
-        pose_cov = [0.0] * 36
-        pose_cov[0]  = 0.05
-        pose_cov[7]  = 0.05
-        pose_cov[14] = 0.10
-        pose_cov[21] = 0.20
-        pose_cov[28] = 0.20
-        pose_cov[35] = 0.20
-        odom.pose.covariance = pose_cov
-
-        odom.twist.twist.linear.x = float(est.velocity[0])
-        odom.twist.twist.linear.y = float(est.velocity[1])
-        odom.twist.twist.linear.z = float(est.velocity[2])
-        odom.twist.twist.angular.x = 0.0
-        odom.twist.twist.angular.y = 0.0
-        odom.twist.twist.angular.z = float(est.yaw_speed)
-
-        twist_cov = [0.0] * 36
-        twist_cov[0]  = 0.10
-        twist_cov[7]  = 0.10
-        twist_cov[14] = 0.20
-        twist_cov[21] = 0.30
-        twist_cov[28] = 0.30
-        twist_cov[35] = 0.30
-        odom.twist.covariance = twist_cov
-
-        self.odometry_pub.publish(odom)
-
-        t = TransformStamped()
-        t.header.stamp = now
-        t.header.frame_id = frame_id
-        t.child_frame_id = child_frame_id
-        t.transform.translation.x = odom.pose.pose.position.x
-        t.transform.translation.y = odom.pose.pose.position.y
-        t.transform.translation.z = odom.pose.pose.position.z
-        t.transform.rotation = odom.pose.pose.orientation
-        self.tf_broadcaster.sendTransform(t)
+            self.create_timer(0.05, self._sim_tick)
 
     def callback_lowstate(self, msg: LowState_):
+        now = self.get_clock().now().to_msg()
+
         imu_msg = Imu()
         imu_msg.header = Header()
-        imu_msg.header.stamp = self.get_clock().now().to_msg()
-        imu_msg.header.frame_id = "imu_link"
-
-        qw = float(msg.imu_state.quaternion[0])
-        qx = float(msg.imu_state.quaternion[1])
-        qy = float(msg.imu_state.quaternion[2])
-        qz = float(msg.imu_state.quaternion[3])
-        imu_msg.orientation.x = qx
-        imu_msg.orientation.y = qy
-        imu_msg.orientation.z = qz
-        imu_msg.orientation.w = qw
-
+        imu_msg.header.stamp = now
+        imu_msg.header.frame_id = "pelvis"
+        imu_msg.orientation.w = float(msg.imu_state.quaternion[0])
+        imu_msg.orientation.x = float(msg.imu_state.quaternion[1])
+        imu_msg.orientation.y = float(msg.imu_state.quaternion[2])
+        imu_msg.orientation.z = float(msg.imu_state.quaternion[3])
         imu_msg.angular_velocity.x = float(msg.imu_state.gyroscope[0])
         imu_msg.angular_velocity.y = float(msg.imu_state.gyroscope[1])
         imu_msg.angular_velocity.z = float(msg.imu_state.gyroscope[2])
         imu_msg.linear_acceleration.x = float(msg.imu_state.accelerometer[0])
         imu_msg.linear_acceleration.y = float(msg.imu_state.accelerometer[1])
         imu_msg.linear_acceleration.z = float(msg.imu_state.accelerometer[2])
-        self.imu_publisher.publish(imu_msg)
+        self.imu_pub.publish(imu_msg)
 
-        posiciones = []
+        # TF pelvis -> imu_link
+        t = TransformStamped()
+        t.header.stamp = now
+        t.header.frame_id = "pelvis"
+        t.child_frame_id = "imu_link"
+        t.transform.translation.x = 0.0
+        t.transform.translation.y = 0.0
+        t.transform.translation.z = 0.0
+        t.transform.rotation = imu_msg.orientation
+        self.tf_broadcaster.sendTransform(t)
+
+        # Motor states
+        positions = []
         motor_list_msg = MotorStateList()
         for idx in self.joint_indices:
             if idx < len(msg.motor_state):
+                m = msg.motor_state[idx]
                 motor_state = MotorState()
                 motor_state.name = _joint_index_to_ros_name[idx]
-                temp_field = msg.motor_state[idx].temperature
-                if hasattr(temp_field, "__len__"):
-                    motor_state.temperature = float(temp_field[0])
-                else:
-                    motor_state.temperature = float(temp_field)
-                motor_state.voltage  = float(msg.motor_state[idx].vol)
-                motor_state.position = float(msg.motor_state[idx].q)
-                motor_state.velocity = float(msg.motor_state[idx].dq)
+                motor_state.temperature = float(m.temperature[0] if hasattr(m.temperature, "__len__") else m.temperature)
+                motor_state.voltage = float(m.vol)
+                motor_state.position = float(m.q)
+                motor_state.velocity = float(m.dq)
                 motor_list_msg.motor_list.append(motor_state)
-                posiciones.append(float(msg.motor_state[idx].q))
-            else:
-                self.get_logger().error(
-                    f"LowState_ has {len(msg.motor_state)} motors; expected index {idx}. Not publishing joints.")
-                return
+                positions.append(float(m.q))
 
         self.motor_state_pub.publish(motor_list_msg)
 
-        if len(posiciones) != len(self.joint_state_msg.name):
-            self.get_logger().error(
-                f"Positions ({len(posiciones)}) do not match joint names ({len(self.joint_state_msg.name)}). Not publishing.")
-            return
-
         if self.publish_joint_states:
-            self.joint_state_msg.header.stamp = self.get_clock().now().to_msg()
-            self.joint_state_msg.position = posiciones
+            self.joint_state_msg.header.stamp = now
+            self.joint_state_msg.position = positions
             self.joint_pub.publish(self.joint_state_msg)
 
     def _sim_tick(self):
         now = self.get_clock().now().to_msg()
-
-        odom = Odometry()
-        odom.header.stamp = now
-        odom.header.frame_id = "odom"
-        odom.child_frame_id = "pelvis"
-        odom.pose.pose.position.x = 0.0
-        odom.pose.pose.position.y = 0.0
-        odom.pose.pose.position.z = 0.0
-        odom.pose.pose.orientation.x = 0.0
-        odom.pose.pose.orientation.y = 0.0
-        odom.pose.pose.orientation.z = 0.0
-        odom.pose.pose.orientation.w = 1.0
-        self.odometry_pub.publish(odom)
-
-        t = TransformStamped()
-        t.header.stamp = now
-        t.header.frame_id = "odom"
-        t.child_frame_id = "pelvis"
-        t.transform.translation.x = 0.0
-        t.transform.translation.y = 0.0
-        t.transform.translation.z = 0.0
-        t.transform.rotation = odom.pose.pose.orientation
-        self.tf_broadcaster.sendTransform(t)
-
         imu_msg = Imu()
-        imu_msg.header = Header()
         imu_msg.header.stamp = now
-        imu_msg.header.frame_id = "imu_link"
+        imu_msg.header.frame_id = "pelvis"
         imu_msg.orientation.w = 1.0
-        self.imu_publisher.publish(imu_msg)
+        self.imu_pub.publish(imu_msg)
 
         if self.publish_joint_states:
             js = JointState()
             js.header.stamp = now
             js.name = self.joint_names
-            js.position = [0.0] * len(self.joint_names)
+            js.position = [0.0] * len(js.name)
             self.joint_pub.publish(js)
-
-        mlist = MotorStateList()
-        for idx in self.joint_indices:
-            m = MotorState()
-            m.name = _joint_index_to_ros_name[idx]
-            m.temperature = 0.0
-            m.voltage = 0.0
-            m.position = 0.0
-            m.velocity = 0.0
-            mlist.motor_list.append(m)
-        self.motor_state_pub.publish(mlist)
 
 
 def main(args=None):

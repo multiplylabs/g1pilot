@@ -51,7 +51,7 @@ def generate_launch_description():
         name='MOLA_WITH_GUI', value=LaunchConfiguration('use_mola_gui'))
     # ~~~~~~~~~~~~
     publish_localization_following_rep105_arg = DeclareLaunchArgument(
-        "publish_localization_following_rep105", default_value="True", description="Whether to publish localization TFs in between map->odom (true) or directly map->base_link (false)")
+        "publish_localization_following_rep105", default_value="False", description="Whether to publish localization TFs in between map->odom (true) or directly map->base_link (false)")
     publish_localization_following_rep105_env_var = SetEnvironmentVariable(
         name='MOLA_LOCALIZ_USE_REP105', value=LaunchConfiguration('publish_localization_following_rep105'))
     # ~~~~~~~~~~~~
@@ -66,12 +66,12 @@ def generate_launch_description():
         name='MOLA_START_ACTIVE', value=LaunchConfiguration('start_active'))
     # ~~~~~~~~~~~~
     mola_lo_reference_frame_arg = DeclareLaunchArgument(
-        "mola_lo_reference_frame", default_value="odom", description="The /tf frame name to be used for MOLA-LO localization updates")
+        "mola_lo_reference_frame", default_value="map", description="The /tf frame name to be used for MOLA-LO localization updates")
     mola_lo_reference_frame_env_var = SetEnvironmentVariable(
         name='MOLA_LO_PUBLISH_REF_FRAME', value=LaunchConfiguration('mola_lo_reference_frame'))
     # ~~~~~~~~~~~~
     mola_se_reference_frame_arg = DeclareLaunchArgument(
-        "mola_state_estimator_reference_frame", default_value="odom", description="The /tf frame name to be used as reference for MOLA State Estimators to publish pose updates")
+        "mola_state_estimator_reference_frame", default_value="map", description="The /tf frame name to be used as reference for MOLA State Estimators to publish pose updates")
     mola_tf_map_env_var = SetEnvironmentVariable(
         name='MOLA_TF_MAP', value=LaunchConfiguration('mola_state_estimator_reference_frame'))
     # ~~~~~~~~~~~~
@@ -96,9 +96,13 @@ def generate_launch_description():
         name='MOLA_LOAD_SM', value=LaunchConfiguration('mola_initial_map_sm_file'))
     # ~~~~~~~~~~~~
     mola_footprint_to_base_link_tf_arg = DeclareLaunchArgument(
-        "mola_footprint_to_base_link_tf", default_value="[0, 0, 0, 0, 0, 0]", description="Can be used to define a custom transformation between base_footprint and base_link. The coordinates are [x, y, z, yaw_deg, pitch_deg, roll_deg].")
+        "mola_footprint_to_base_link_tf", 
+        default_value="[0, 0, 0, 0, 0, 0]",
+        description="Transformation between base_footprint and pelvis."
+    )
     mola_footprint_to_base_link_tf_env_var = SetEnvironmentVariable(
-        name='MOLA_TF_FOOTPRINT_TO_BASE_LINK', value=LaunchConfiguration('mola_footprint_to_base_link_tf'))
+        name='MOLA_TF_FOOTPRINT_TO_BASE_LINK',
+        value=LaunchConfiguration('mola_footprint_to_base_link_tf'))
     # ~~~~~~~~~~~~
     enforce_planar_motion_arg = DeclareLaunchArgument(
         "enforce_planar_motion", default_value="False", description="Whether to enforce z, pitch, and roll to be zero.")
@@ -163,6 +167,12 @@ def generate_launch_description():
         "mola_precise_deskew_from_imu", default_value="False", description="Whether to use the IMU to deskew the LiDAR scans more precisely")
     mola_precise_deskew_from_imu_env_var = SetEnvironmentVariable(
         name='MOLA_USE_PRECISE_LOCAL_VELOCITIES', value=LaunchConfiguration('mola_precise_deskew_from_imu'))
+    
+    mola_footprint_to_base_link_tf_arg = DeclareLaunchArgument(
+        "mola_footprint_to_base_link_tf", 
+        default_value="[0, 0, 0, 0, 0, 0]",
+        description="Transformation between base_footprint and pelvis."
+    )
 
     # Namespace (Based on Nav2's bring-up launch file!)
     # ---------------------------------------------------
@@ -178,6 +188,9 @@ def generate_launch_description():
         'use_namespace',
         default_value='false',
         description='Whether to apply a namespace to the navigation stack')
+    
+    disable_tf_publish_env_var = SetEnvironmentVariable(
+        name='MOLA_LOCALIZATION_PUBLISH_TF', value='False')
 
     # Map fully qualified names to relative ones so the node's namespace can be prepended.
     # In case of the transforms (tf), currently, there doesn't seem to be a better alternative
@@ -274,5 +287,6 @@ def generate_launch_description():
         mola_precise_deskew_from_imu_arg,
         mola_precise_deskew_from_imu_env_var,
         use_rviz_arg,
-        node_group
+        node_group,
+        disable_tf_publish_env_var,
     ])

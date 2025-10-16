@@ -21,7 +21,7 @@ class Nav2Point(Node):
         self.declare_parameter('pos_kp', 0.8)
         self.declare_parameter('yaw_kp', 1.5)
         self.declare_parameter('waypoint_tolerance', 0.20)
-        self.declare_parameter('goal_tolerance', 0.20)
+        self.declare_parameter('goal_tolerance', 0.10)
         self.declare_parameter('frame_id', 'world')
         self.declare_parameter('joy_topic', '/g1pilot/auto_joy')
         self.declare_parameter('path_topic', '/g1pilot/path')
@@ -156,7 +156,7 @@ class Nav2Point(Node):
         ax3 = max(-1.0, min(1.0, -wz/self.wz_lim))
         axes[1] = ax1
         axes[0] = ax0
-        axes[3] = ax3
+        axes[2] = ax3
         buttons[7] = 1
         joy.axes = axes
         joy.buttons = buttons

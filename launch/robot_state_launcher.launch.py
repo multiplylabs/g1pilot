@@ -26,7 +26,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false",
                               description="Use simulation (Gazebo) clock if true"),
-        DeclareLaunchArgument("use_robot", default_value="false",
+        DeclareLaunchArgument("use_robot", default_value="true",
                               description="Connect to real robot if true"),
         DeclareLaunchArgument("publish_joint_states", default_value="true",
                               description="Publish joint_states from node"),
@@ -84,7 +84,14 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='world_to_odom_tf',
-            arguments=['0','0','0','0','0','0','world','odom']
+            arguments=['0','0','0','0','0','0','world','odom_unitree']
+        ),
+
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='pelvis_to_base_link_tf',
+            arguments=['0','0','0','0','0','0','base_link','pelvis']
         ),
 
         Node(

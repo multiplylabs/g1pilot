@@ -3,11 +3,12 @@
 
 import math
 from typing import Tuple
-
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Quaternion, TransformStamped
 from nav_msgs.msg import Odometry
+from tf2_ros import TransformBroadcaster
+
 
 def euler_to_quat(roll: float, pitch: float, yaw: float) -> Tuple[float, float, float, float]:
     cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
@@ -18,6 +19,7 @@ def euler_to_quat(roll: float, pitch: float, yaw: float) -> Tuple[float, float, 
     y = cr * sp * cy + sr * cp * sy
     z = cr * cp * sy - sr * sp * cy
     return (x, y, z, w)
+
 
 def quat_multiply(q1, q2):
     x1, y1, z1, w1 = q1
@@ -34,60 +36,44 @@ def quat_normalize(q):
     n = math.sqrt(x * x + y * y + z * z + w * w)
     return (0.0, 0.0, 0.0, 1.0) if n == 0.0 else (x / n, y / n, z / n, w / n)
 
-
-def rx_pi_apply_to_vec3(x, y, z):
-    return (x, -y, -z)
-
-
-def rx_pi_quat():
-    return euler_to_quat(math.pi, 0.0, 0.0)
-
-
-class OdomReorienter(Node):
+class MolaTFBridgeReoriented(Node):
     def __init__(self):
-        super().__init__('odom_reorienter')
+        super().__init__('mola_tf_bridge_reoriented')
 
         self.declare_parameter('in_topic', '/lidar_odometry/pose')
         self.declare_parameter('out_topic', '/lidar_odometry/pose_fixed')
-        self.declare_parameter('roll_offset_deg', 0.0)
-        self.declare_parameter('pitch_offset_deg', 0.0)
-        self.declare_parameter('yaw_offset_deg', 0.0)
+        self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('base_frame', 'pelvis')
         self.declare_parameter('normalize_quaternion', True)
-        self.declare_parameter('frame_id_override', '')
-        self.declare_parameter('fix_left_right_inversion', True)
+        self.declare_parameter('publish_odometry', True)
 
-        in_topic = self.get_parameter('in_topic').get_parameter_value().string_value
-        out_topic = self.get_parameter('out_topic').get_parameter_value().string_value
-        roll_deg = self.get_parameter('roll_offset_deg').get_parameter_value().double_value
-        pitch_deg = self.get_parameter('pitch_offset_deg').get_parameter_value().double_value
-        yaw_deg = self.get_parameter('yaw_offset_deg').get_parameter_value().double_value
-        self.normalize_quat = self.get_parameter('normalize_quaternion').get_parameter_value().bool_value
-        self.frame_id_override = self.get_parameter('frame_id_override').get_parameter_value().string_value
-        self.fix_lr = self.get_parameter('fix_left_right_inversion').get_parameter_value().bool_value
+        in_topic = self.get_parameter('in_topic').value
+        out_topic = self.get_parameter('out_topic').value
+        self.map_frame = self.get_parameter('map_frame').value
+        self.base_frame = self.get_parameter('base_frame').value
+        self.normalize_quat = self.get_parameter('normalize_quaternion').value
+        self.publish_odometry = self.get_parameter('publish_odometry').value
 
-        roll = math.radians(roll_deg)
-        pitch = math.radians(pitch_deg)
-        yaw = math.radians(yaw_deg)
-        q_user = euler_to_quat(roll, pitch, yaw)
+        q_fix = euler_to_quat(0.0, 0.0, 0.0)
+        self.q_prefix = q_fix
 
-        q_fix = rx_pi_quat() if self.fix_lr else (0.0, 0.0, 0.0, 1.0)
-
-        self.q_prefix = quat_multiply(q_user, q_fix)
-
+        self.tf_broadcaster = TransformBroadcaster(self)
         self.sub = self.create_subscription(Odometry, in_topic, self.cb_odom, 10)
-        self.pub = self.create_publisher(Odometry, out_topic, 10)
+        self.pub = self.create_publisher(Odometry, out_topic, 10) if self.publish_odometry else None
+
+        self.get_logger().info(f"Listening to MOLA odometry on: {in_topic}")
+        self.get_logger().info(f"Publishing TF: {self.map_frame} → {self.base_frame}")
+        if self.publish_odometry:
+            self.get_logger().info(f"Also publishing corrected odometry on: {out_topic}")
+        self.get_logger().info("Applied fixed orientation correction: Rz(π) (180° yaw)")
 
     def cb_odom(self, msg: Odometry):
         out = Odometry()
         out.header = msg.header
-        out.child_frame_id = msg.child_frame_id
+        out.header.frame_id = self.map_frame
+        out.child_frame_id = self.base_frame
 
-        if self.frame_id_override:
-            out.header.frame_id = self.frame_id_override
-
-        px, py, pz = msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z
-        if self.fix_lr:
-            px, py, pz = rx_pi_apply_to_vec3(px, py, pz)
+        px, py, pz = msg.pose.pose.position.x, -msg.pose.pose.position.y, msg.pose.pose.position.z
         out.pose.pose.position.x = px
         out.pose.pose.position.y = py
         out.pose.pose.position.z = pz
@@ -101,17 +87,28 @@ class OdomReorienter(Node):
         q_out = quat_multiply(self.q_prefix, q_in)
         if self.normalize_quat:
             q_out = quat_normalize(q_out)
-        out.pose.pose.orientation = Quaternion(x=q_out[0], y=q_out[1], z=q_out[2], w=q_out[3])
+        out.pose.pose.orientation = Quaternion(x=q_out[0], y=q_out[1], z=q_out[2], w=-q_out[3])
 
         out.pose.covariance = msg.pose.covariance
         out.twist = msg.twist
 
-        self.pub.publish(out)
+        if self.pub:
+            self.pub.publish(out)
+
+        t = TransformStamped()
+        t.header = out.header
+        t.header.frame_id = self.map_frame
+        t.child_frame_id = self.base_frame
+        t.transform.translation.x = px
+        t.transform.translation.y = py
+        t.transform.translation.z = pz
+        t.transform.rotation = out.pose.pose.orientation
+        self.tf_broadcaster.sendTransform(t)
 
 
 def main():
     rclpy.init()
-    node = OdomReorienter()
+    node = MolaTFBridgeReoriented()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
