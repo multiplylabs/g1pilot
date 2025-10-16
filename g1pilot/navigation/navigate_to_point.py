@@ -114,7 +114,7 @@ class Nav2Point(Node):
         self.pub_wp_marker.publish(m)
 
     def loop(self):
-        if not (self.have_pose and self.path and 0 <= self.idx < len(self.path)):
+        if not self.have_pose or not self.path or self.idx >= len(self.path):
             return
         wx, wy = self.path[self.idx]
         dx = wx - self.x

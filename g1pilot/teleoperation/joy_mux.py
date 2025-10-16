@@ -127,9 +127,9 @@ class JoyMux(Node):
 
     def build_auto_joy(self):
         if not(self.have_pose and self.path):
-            j=Joy(); j.axes=[0.0]*8; j.buttons=[0]*8; return j
+            j=Joy(); j.axes=[0.0]*9; j.buttons=[0]*14; return j
         if math.hypot(self.goal[0]-self.x,self.goal[1]-self.y)<=self.goal_tol:
-            j=Joy(); j.axes=[0.0]*8; j.buttons=[0]*8; return j
+            j=Joy(); j.axes=[0.0]*9; j.buttons=[0]*14; return j
         i=self.nearest_index()
         tgt,jidx=self.target_point(i)
         dx=tgt[0]-self.x; dy=tgt[1]-self.y
@@ -147,11 +147,11 @@ class JoyMux(Node):
         ax3=clamp(-wz/self.wz_lim,-0.1,0.1)
         out=Joy()
         out.axes=[0.0]*9
-        out.buttons=[0]*9
+        out.buttons=[0]*14
         out.axes[1]=ax1
         out.axes[0]=ax0
         out.axes[3]=ax3
-        out.buttons[8]=1
+        out.buttons[7]=1
         return out
 
     def loop(self):

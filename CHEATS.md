@@ -2,7 +2,7 @@
 
 ###  PUBLISH GOAL
 ```bash
-ros2 topic pub /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_id: 'map'}, point: {x: 1.0, y: 0.0, z: 0.0}}"
+ros2 topic pub --once /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_id: 'map'}, point: {x: 1.0, y: 0.0, z: 0.0}}"
 ```
 
 ### PUBLISH JOY
