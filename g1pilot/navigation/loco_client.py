@@ -186,16 +186,25 @@ class G1LocoClient(Node):
                 else:
                     self.log_once_attr("warn", "Cannot move arms to home, arm control mode is disabled.", "_warn_move_home_no_control_logged")
 
+            if msg.buttons[3] == 1 and self.prev_buttons[3] == 0:
+                self.robot.ShakeHand()
+                self.log_once_attr("info", "Robot is shaking hand.", "_shake_hand_logged")
+            if msg.buttons[3] == 0 and self.prev_buttons[3] == 1:
+                self.robot.ShakeHand()
+                self.clear_attr("_shake_hand_logged")
+
+            if msg.buttons[13] == 1 and self.prev_buttons[13] == 0:
+                self.robot.WaveHand()
+                self.log_once_attr("info", "Robot is waving hand.", "_wave_hand_logged")
+
             # L1 -> Emergency stop
             if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:
                 self.log_once_attr("warn", "Emergency stop button pressed!", "_e_stop_button_pressed_logged")
                 self.robot_stopped = True
                 self.balanced = False
-                if self.use_robot and self.robot is not None:
-                    self.robot.Damp()
-                if self.control_arms:
-                    self.control_arms = False
-                    self.arm_control.set_control_mode(False)
+                self.robot.Damp()
+                self.control_arms = False
+                self.arm_control.set_control_mode(False)
             if msg.buttons[5] == 0 and self.prev_buttons[5] == 1:
                 self.clear_attr("_e_stop_button_pressed_logged")
 
@@ -218,9 +227,9 @@ class G1LocoClient(Node):
                     self.robot.StopMove()
 
             if msg.buttons[8] == 1 and not self.robot_stopped and self.balanced:
-                vx  = round(msg.axes[1] * 0.8 * -1, 2)
-                vy  = round(msg.axes[0] * 0.8 * -1, 2)
-                yaw = round(msg.axes[3] * 0.8 * 1, 2)
+                vx  = round(msg.axes[1] * 0.5 * -1, 2)
+                vy  = round(msg.axes[0] * 0.5 * -1, 2)
+                yaw = round(msg.axes[2] * 0.5 * -1, 2)
                 self.log_once_attr("info", f"Moving with vx: {vx}, vy: {vy}, yaw: {yaw}", "_moving_logged")
                 if self.use_robot and self.robot is not None:
                     if abs(vx) < 0.03 and abs(vy) < 0.03 and abs(yaw) < 0.03:

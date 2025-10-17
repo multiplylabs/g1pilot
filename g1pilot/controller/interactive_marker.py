@@ -16,7 +16,7 @@ class InteractiveMarkerEFF(Node):
     def __init__(self):
         super().__init__('multi_ee_goal_markers')
 
-        self.declare_parameter('fixed_frame', 'odom')
+        self.declare_parameter('fixed_frame', 'pelvis')
         self.declare_parameter('spawn_rate_hz', 5.0)
 
         self.declare_parameter('right_tf_frame', 'right_hand_point_contact')

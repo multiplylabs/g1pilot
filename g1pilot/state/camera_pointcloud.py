@@ -3,156 +3,172 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-import numpy as np
 
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
-from sensor_msgs import image_encodings
+from cv_bridge import CvBridge
+import numpy as np
 
-class DepthToCloudNode(Node):
+from message_filters import Subscriber, ApproximateTimeSynchronizer
+
+from sensor_msgs_py import point_cloud2
+
+
+class DepthToColoredPC(Node):
+    """
+    Convierte depth + color en PointCloud2 con RGB.
+    Asume que la imagen de profundidad está registrada al frame de la cámara color.
+    """
+
     def __init__(self):
-        super().__init__('depth_to_cloud_py')
+        super().__init__('depth_to_colored_pointcloud')
+
+        # Parámetros
         self.declare_parameter('depth_topic', '/camera/camera/depth/image_rect_raw')
-        self.declare_parameter('camera_info_topic', '/camera/camera/depth/camera_info')
-        self.declare_parameter('cloud_topic', 'depth/points')
-        self.declare_parameter('depth_scale', 0.001)
-        self.declare_parameter('max_range_m', 10.0)
-        self.declare_parameter('publish_organized', True)
-        self.declare_parameter('use_nan_for_invalid', True)
+        self.declare_parameter('color_topic', '/camera/camera/color/image_raw')
+        self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
+        self.declare_parameter('queue_size', 10)
+        self.declare_parameter('slop', 0.05)  # tolerancia en la sincronización (s)
+        self.declare_parameter('frame_id', '')  # si vacío usa el de la imagen color
 
-        self.depth_topic = self.get_parameter('depth_topic').get_parameter_value().string_value
-        self.info_topic  = self.get_parameter('camera_info_topic').get_parameter_value().string_value
-        self.cloud_topic = self.get_parameter('cloud_topic').get_parameter_value().string_value
-        self.depth_scale = float(self.get_parameter('depth_scale').value)
-        self.max_range   = float(self.get_parameter('max_range_m').value)
-        self.pub_org     = bool(self.get_parameter('publish_organized').value)
-        self.use_nan     = bool(self.get_parameter('use_nan_for_invalid').value)
+        depth_topic = self.get_parameter('depth_topic').get_parameter_value().string_value
+        color_topic = self.get_parameter('color_topic').get_parameter_value().string_value
+        info_topic = self.get_parameter('camera_info_topic').get_parameter_value().string_value
+        queue_size = self.get_parameter('queue_size').get_parameter_value().integer_value
+        slop = self.get_parameter('slop').get_parameter_value().double_value
+        self.frame_id_param = self.get_parameter('frame_id').get_parameter_value().string_value
 
-        self.have_info = False
-        self.fx = self.fy = self.cx = self.cy = 0.0
-        self.width = self.height = 0
-        self._u_factor = None
-        self._v_factor = None
-        self._xyz_buf = None
+        self.bridge = CvBridge()
+        self.cam_info: CameraInfo | None = None
 
-        qos = qos_profile_sensor_data
-        self.sub_info  = self.create_subscription(CameraInfo, self.info_topic, self._on_info, qos)
-        self.sub_depth = self.create_subscription(Image,      self.depth_topic, self._on_depth, qos)
-        self.pub_cloud = self.create_publisher(PointCloud2, self.cloud_topic, qos)
+        # Suscripción a CameraInfo (solo necesitamos la de color si depth está registrada a color)
+        self.sub_info = self.create_subscription(CameraInfo, info_topic, self._info_cb, 10)
 
-        self.get_logger().info(f"DepthToCloud PY → depth: {self.depth_topic} | info: {self.info_topic} | out: {self.cloud_topic}")
+        # Sincronización aproximada de depth y color
+        self.sub_depth = Subscriber(self, Image, depth_topic)
+        self.sub_color = Subscriber(self, Image, color_topic)
+        self.ts = ApproximateTimeSynchronizer(
+            [self.sub_depth, self.sub_color], queue_size=queue_size, slop=slop
+        )
+        self.ts.registerCallback(self._sync_cb)
 
-    # ---------------- CameraInfo ----------------
-    def _on_info(self, msg: CameraInfo):
-        self.fx = float(msg.k[0]); self.fy = float(msg.k[4])
-        self.cx = float(msg.k[2]); self.cy = float(msg.k[5])
-        self.width  = int(msg.width)
-        self.height = int(msg.height)
-        self.have_info = (self.fx > 0.0 and self.fy > 0.0 and self.width > 1 and self.height > 1)
-        if not self.have_info:
-            self.get_logger().warn("Invalid CameraInfo. Waiting for correct intrinsics...")
-            return
-        self._prepare_grids()
+        # Publicador de PointCloud2
+        self.pub = self.create_publisher(PointCloud2, 'colored_pointcloud', 1)
 
-    def _prepare_grids(self):
-        u = np.arange(self.width, dtype=np.float32)
-        v = np.arange(self.height, dtype=np.float32)
-        self._u_factor = (u - self.cx) / self.fx
-        self._v_factor = (v - self.cy) / self.fy
-        self._xyz_buf = np.empty((self.height, self.width, 3), dtype=np.float32)
+        self.get_logger().info(
+            f'✅ depth_to_colored_pointcloud listo.\n'
+            f'   depth: {depth_topic}\n'
+            f'   color: {color_topic}\n'
+            f'   info : {info_topic}\n'
+            f'   out  : colored_pointcloud'
+        )
 
-    def _on_depth(self, img: Image):
-        if not self.have_info:
-            self.get_logger().warn_throttle(2.0, "No CameraInfo yet. Cloud not published.")
+    def _info_cb(self, msg: CameraInfo):
+        self.cam_info = msg
+
+    def _sync_cb(self, depth_msg: Image, color_msg: Image):
+        if self.cam_info is None:
+            self.get_logger().warn('Esperando CameraInfo...')
             return
 
-        H, W = int(img.height), int(img.width)
-        if (H != self.height) or (W != self.width) or (self._u_factor is None):
-            self.width, self.height = W, H
-            self._prepare_grids()
+        # Obtén intrínsecos
+        fx = self.cam_info.k[0]
+        fy = self.cam_info.k[4]
+        cx = self.cam_info.k[2]
+        cy = self.cam_info.k[5]
 
-        if img.encoding in (image_encodings.TYPE_16UC1, image_encodings.MONO16):
-            z = np.frombuffer(img.data, dtype=np.uint16).reshape(H, W).astype(np.float32) * self.depth_scale
-            invalid = (z <= 0.0)
-        elif img.encoding == image_encodings.TYPE_32FC1:
-            z = np.frombuffer(img.data, dtype=np.float32).reshape(H, W)
-            if self.depth_scale != 1.0:
-                z = z * self.depth_scale
-            invalid = np.isnan(z) | (z <= 0.0)
-        else:
-            self.get_logger().warn_throttle(5.0, f"Encoding not supported: {img.encoding}")
+        # Depth a numpy
+        try:
+            # depth puede venir como 16UC1 (milímetros) o 32FC1 (metros)
+            if depth_msg.encoding in ('16UC1', 'mono16', 'uint16'):
+                depth = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough').astype(np.float32)
+                depth *= 0.001  # mm -> m
+            else:
+                # Asumimos metros
+                depth = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough').astype(np.float32)
+        except Exception as e:
+            self.get_logger().error(f'Error convirtiendo depth: {e}')
             return
 
-        if self.max_range and self.max_range > 0.0:
-            invalid = invalid | (z > self.max_range)
+        # Color a numpy (RGB8)
+        try:
+            # Si viene en BGR8, lo pasamos a RGB
+            if color_msg.encoding == 'bgr8':
+                bgr = self.bridge.imgmsg_to_cv2(color_msg, desired_encoding='bgr8')
+                rgb = bgr[..., ::-1].copy()
+            else:
+                rgb = self.bridge.imgmsg_to_cv2(color_msg, desired_encoding='rgb8')
+        except Exception as e:
+            self.get_logger().error(f'Error convirtiendo color: {e}')
+            return
 
-        X = z * self._u_factor[None, :]
-        Y = z * self._v_factor[:, None]
+        h, w = depth.shape
+        if rgb.shape[0] != h or rgb.shape[1] != w:
+            self.get_logger().warn(
+                f'Tamaño depth ({w}x{h}) != color ({rgb.shape[1]}x{rgb.shape[0]}). '
+                f'Se recortará al mínimo común.'
+            )
+            H = min(h, rgb.shape[0])
+            W = min(w, rgb.shape[1])
+            depth = depth[:H, :W]
+            rgb = rgb[:H, :W]
+            h, w = H, W
 
-        cloud = PointCloud2()
-        cloud.header = img.header
-        cloud.fields = [
+        # Malla de pixeles
+        u = np.arange(w, dtype=np.float32)
+        v = np.arange(h, dtype=np.float32)
+        uu, vv = np.meshgrid(u, v)
+
+        # Máscara válida
+        valid = np.isfinite(depth) & (depth > 0.0)
+
+        if not np.any(valid):
+            self.get_logger().warn('No hay valores válidos de profundidad.')
+            return
+
+        z = depth[valid]
+        x = (uu[valid] - cx) * z / fx
+        y = (vv[valid] - cy) * z / fy
+
+        # Colores (uint8)
+        colors = rgb[valid]  # shape [N, 3] en RGB
+        r = colors[:, 0].astype(np.uint32)
+        g = colors[:, 1].astype(np.uint32)
+        b = colors[:, 2].astype(np.uint32)
+
+        # Empaquetar RGB a un uint32 estilo PCL (0x00RRGGBB) y verlo como float32
+        rgb_uint32 = (r << 16) | (g << 8) | b
+        rgb_float = rgb_uint32.view(np.float32)
+
+        # Armar lista de puntos (x, y, z, rgb)
+        points = np.column_stack((x, y, z, rgb_float))
+
+        # Crear PointCloud2
+        fields = [
             PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
             PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+            PointField(name='rgb', offset=12, datatype=PointField.FLOAT32, count=1),
         ]
-        cloud.is_bigendian = False
-        cloud.point_step = 12 
+        header_frame = self.frame_id_param if self.frame_id_param else (color_msg.header.frame_id or 'camera_color_optical_frame')
+        header = depth_msg.header  # tiempo del depth
+        header.frame_id = header_frame
 
-        if self.pub_org:
-            xyz = self._xyz_buf
-            xyz[..., 0] = X
-            xyz[..., 1] = Y
-            xyz[..., 2] = z
+        cloud_msg = point_cloud2.create_cloud(header, fields, points.tolist())
 
-            if self.use_nan:
-                if np.any(invalid):
-                    xyz[invalid, 0] = np.nan
-                    xyz[invalid, 1] = np.nan
-                    xyz[invalid, 2] = np.nan
-                cloud.is_dense = False
-            else:
-                if np.any(invalid):
-                    xyz[invalid, :] = 0.0
-                cloud.is_dense = True
+        self.pub.publish(cloud_msg)
 
-            cloud.height = H
-            cloud.width  = W
-            cloud.row_step = cloud.point_step * cloud.width
-            cloud.data = memoryview(xyz.tobytes(order='C'))
-        else:
-            valid = ~invalid
-            n = int(valid.sum())
-            if n == 0:
-                cloud.height = 1
-                cloud.width  = 0
-                cloud.row_step = 0
-                cloud.data = b''
-                cloud.is_dense = True
-                self.pub_cloud.publish(cloud)
-                return
-
-            xyz = np.empty((n, 3), dtype=np.float32)
-            xyz[:, 0] = X[valid]
-            xyz[:, 1] = Y[valid]
-            xyz[:, 2] = z[valid]
-
-            cloud.height = 1
-            cloud.width  = n
-            cloud.row_step = cloud.point_step * cloud.width
-            cloud.data = memoryview(xyz.tobytes(order='C'))
-            cloud.is_dense = True
-
-        self.pub_cloud.publish(cloud)
 
 def main():
     rclpy.init()
-    node = DepthToCloudNode()
+    node = DepthToColoredPC()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

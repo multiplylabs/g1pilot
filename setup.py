@@ -24,6 +24,7 @@ setup(
             'launch/teleoperation_launcher.launch.py',
             'launch/navigation_launcher.launch.py',
             'launch/mola_launcher.launch.py',
+            'launch/livox_launcher.launch.py',
         ]),
 
         # URDF / XML
@@ -66,7 +67,8 @@ setup(
             'loco_client = g1pilot.navigation.loco_client:main',
             'dijkstra_planner = g1pilot.navigation.dijkstra_planner:main',
             'nav2point = g1pilot.navigation.navigate_to_point:main',
-            'create_map = g1pilot.navigation.create_map:main'
+            'create_map = g1pilot.navigation.create_map:main',
+            'mola_fixed = g1pilot.navigation.fix_mola_odometry:main',
         ],
     },
 )
