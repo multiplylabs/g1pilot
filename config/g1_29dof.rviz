@@ -7,7 +7,7 @@ Panels:
         - /Global Options1
         - /Status1
         - /TF1/Frames1
-        - /Nav2Goal1/LidarOdometry1
+        - /Nav2Goal1
         - /Nav2Goal1/RobotOdometry1/Shape1
         - /Controller1/InteractiveMarkers1
         - /Utils1/LivoxCloud1
@@ -31,7 +31,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: LivoxCloud
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -339,8 +339,6 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        base_footprint:
-          Value: true
         base_link:
           Value: true
         camera_link:
@@ -403,8 +401,6 @@ Visualization Manager:
           Value: true
         logo_link:
           Value: false
-        map:
-          Value: true
         mid360_link:
           Value: false
         mrbeam_link:
@@ -473,10 +469,7 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        map:
-          base_link:
-            base_footprint:
-              {}
+        base_link:
           pelvis:
             imu_in_pelvis:
               {}
@@ -569,7 +562,7 @@ Visualization Manager:
           Enabled: true
           Name: GoalMarker
           Namespaces:
-            g1pilot_goal: true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -844,7 +837,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 9; 12; 40
-    Fixed Frame: map
+    Fixed Frame: pelvis
     Frame Rate: 30
   Name: root
   Tools:
@@ -887,25 +880,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 4.402594089508057
+      Distance: 3.666898250579834
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.030856892466545105
-        Y: 0.10606541484594345
-        Z: 0.5176416039466858
+        X: 0.5866363644599915
+        Y: -1.1879069805145264
+        Z: -0.654634416103363
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9397966861724854
+      Pitch: 0.6497964859008789
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.65543794631958
+      Yaw: 1.805437445640564
     Saved: ~
 Window Geometry:
   Displays:

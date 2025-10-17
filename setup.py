@@ -24,6 +24,7 @@ setup(
             'launch/teleoperation_launcher.launch.py',
             'launch/navigation_launcher.launch.py',
             'launch/mola_launcher.launch.py',
+            'launch/livox_launcher.launch.py',
         ]),
 
         # URDF / XML

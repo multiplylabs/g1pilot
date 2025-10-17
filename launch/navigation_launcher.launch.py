@@ -18,7 +18,7 @@ def generate_launch_description():
         DeclareLaunchArgument("interface", default_value="eth0"),
         DeclareLaunchArgument("use_robot", default_value="true"),
         DeclareLaunchArgument("arm_controlled", default_value="both"),
-        DeclareLaunchArgument("enable_arm_ui", default_value="false"),
+        DeclareLaunchArgument("enable_arm_ui", default_value="true"),
         DeclareLaunchArgument("ik_use_waist", default_value="true"),
         DeclareLaunchArgument("ik_alpha", default_value="0.2"),
         DeclareLaunchArgument("ik_max_dq_step", default_value="0.05"),
@@ -62,15 +62,4 @@ def generate_launch_description():
             }],
             output='screen'
         ),
-
-        # Node(
-        #     package='g1pilot',
-        #     executable='create_map',
-        #     name='create_map',
-        #     parameters=[{
-        #         'interface': interface,
-        #         'use_robot': ParameterValue(use_robot, value_type=bool),
-        #     }],
-        #     output='screen'
-        # ),
     ])

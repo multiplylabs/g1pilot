@@ -210,7 +210,7 @@ class G1_29_ArmController:
         self._ik_q_prev_full = None
         self._log_ik_active = False
 
-        self._ik_world_frame = 'odom'
+        self._ik_world_frame = 'pelvis'
         self._tf_buffer = None
         self._tf_listener = None
 
@@ -858,7 +858,7 @@ def main():
         'ik_alpha': 0.2,
         'ik_max_dq_step': 0.05,
         'arm_velocity_limit': 2.0,
-        'ik_world_frame': 'odom',
+        'ik_world_frame': 'pelvis',
         'ee_auto_calibrate': True,
     }
     for k, v in defaults.items():

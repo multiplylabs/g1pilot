@@ -18,7 +18,7 @@ class JoyMux(Node):
     def __init__(self):
         super().__init__('pure_pursuit_joy_mux')
         self.declare_parameter('path_topic','/g1pilot/path')
-        self.declare_parameter('odom_topic','/g1pilot/odometry')
+        self.declare_parameter('odom_topic','/lidar_odometry/pose_fixed')
         self.declare_parameter('manual_topic','/g1pilot/joy_manual')
         self.declare_parameter('out_topic','/g1pilot/joy')
         self.declare_parameter('auto_enable_topic','/g1pilot/auto_enable')
@@ -50,6 +50,8 @@ class JoyMux(Node):
         self.sub_en=self.create_subscription(Bool,self.auto_enable_topic,self.cb_enable,qos)
         self.pub=self.create_publisher(Joy,self.out_topic,qos)
         self.timer=self.create_timer(1.0/self.rate,self.loop)
+        self.sub_auto = self.create_subscription(Joy, '/g1pilot/auto_joy', self.cb_auto, qos)
+        self.last_auto = None
         self.x=self.y=self.yaw=0.0
         self.have_pose=False
         self.path=[]
@@ -59,6 +61,9 @@ class JoyMux(Node):
         self.last_manual=None
         self.t_last_manual=0.0
         self.use_manual=False
+
+    def cb_auto(self, msg: Joy):
+        self.last_auto = msg
 
     def cb_odom(self,msg:Odometry):
         self.x=float(msg.pose.pose.position.x)
@@ -125,47 +130,18 @@ class JoyMux(Node):
         while a<-math.pi: a+=2*math.pi
         return a
 
-    def build_auto_joy(self):
-        if not(self.have_pose and self.path):
-            j=Joy(); j.axes=[0.0]*9; j.buttons=[0]*14; return j
-        if math.hypot(self.goal[0]-self.x,self.goal[1]-self.y)<=self.goal_tol:
-            j=Joy(); j.axes=[0.0]*9; j.buttons=[0]*14; return j
-        i=self.nearest_index()
-        tgt,jidx=self.target_point(i)
-        dx=tgt[0]-self.x; dy=tgt[1]-self.y
-        c=math.cos(-self.yaw); s=math.sin(-self.yaw)
-        vx_b=c*dx - s*dy
-        vy_b=s*dx + c*dy
-        n=math.hypot(vx_b,vy_b)
-        if n>1e-6:
-            vx_b/=n; vy_b/=n
-        seg_dir=self.segment_yaw(jidx)
-        yaw_err=self.wrap(seg_dir - self.yaw)
-        wz=clamp(self.yaw_kp*yaw_err,-self.wz_lim,self.wz_lim)
-        ax1=clamp(-vx_b,-0.1,0.1)
-        ax0=clamp(-vy_b,-0.1,0.1)
-        ax3=clamp(-wz/self.wz_lim,-0.1,0.1)
-        out=Joy()
-        out.axes=[0.0]*9
-        out.buttons=[0]*14
-        out.axes[1]=ax1
-        out.axes[0]=ax0
-        out.axes[3]=ax3
-        out.buttons[7]=1
-        return out
 
     def loop(self):
         now = time.time()
         use_manual = (self.last_manual is not None) and (not self.auto_enabled or (now - self.t_last_manual) < self.man_win)
 
-        if self.auto_enabled:
-            aj = self.build_auto_joy()
-            self.pub.publish(aj)
+        if self.auto_enabled and self.last_auto is not None:
+            self.pub.publish(self.last_auto)
             return
-        
         elif use_manual:
             self.pub.publish(self.last_manual)
             return
+
 
 def main(args=None):
     rclpy.init(args=args)
