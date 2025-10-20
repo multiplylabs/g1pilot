@@ -34,6 +34,8 @@ def generate_launch_description():
                               description="Network interface for Unitree SDK"),
         DeclareLaunchArgument("sim_rate_hz", default_value="50.0",
                               description="Simulation rate when use_robot=false"),
+        DeclareLaunchArgument("arm_controlled", default_value="both",
+                                description="Which arm to control: 'left', 'right', or 'both'"),
 
         Node(
             package='g1pilot',
@@ -62,6 +64,17 @@ def generate_launch_description():
             executable='mola_fixed',
             name='mola_fixed',
             parameters=[{
+            }],
+            output='screen'
+        ),
+
+        Node(
+            package='g1pilot',
+            executable='dx3_controller',
+            name='dx3_controller',
+            parameters=[{
+                'arm_controlled': ParameterValue(LaunchConfiguration("arm_controlled"), value_type=str),
+                'interface': ParameterValue(LaunchConfiguration("interface"), value_type=str)
             }],
             output='screen'
         ),

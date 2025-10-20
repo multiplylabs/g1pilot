@@ -21,9 +21,11 @@ RUN apt-get update && apt-get install -yy \
 
 RUN pip3 install --upgrade pip
 
-RUN git clone https://github.com/lnotspotl/unitree_sdk2_python.git
-WORKDIR /unitree_sdk2_python
-RUN pip3 install -e .
+RUN git clone https://github.com/lnotspotl/unitree_sdk2_python.git \
+ && cd unitree_sdk2_python \
+ && git checkout 7c661d27f4ae064ffd0dd633fd9d5b518ef0b508 \
+ && pip3 install -e .
+
 
 RUN mkdir -p /ros2_ws/src
 RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git /ros2_ws/src/livox_ros_driver2
