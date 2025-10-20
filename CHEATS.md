@@ -15,7 +15,7 @@ ros2 topic pub --once /g1pilot/joy sensor_msgs/msg/Joy '{header: {stamp: {sec: 0
 ros2 topic pub --once /g1pilot/dx3/right/hand_action std_msgs/msg/String "{data: 'close'}"
 ```
 ```bash
-ros2 topic pub --once /g1pilot/dx3/right/hand_action std_msgs/msg/String "{data: 'open'}"
+ros2 topic pub --once /g1pilot/dx3/left/hand_action std_msgs/msg/String "{data: 'open'}"
 ```
 
 ### STANDARD SEQUENCE FOR UNITREE ROBOT

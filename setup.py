@@ -57,7 +57,9 @@ setup(
 
             # Controllers Nodes
             'interactive_marker = g1pilot.controller.interactive_marker:main',
-            'dx3_controller = g1pilot.controller.dx3_hand:main',
+
+            # Manipulation Nodes
+            'dx3_controller = g1pilot.manipulation.dx3_hand:main',
 
             # Teleoperation Nodes
             'joystick = g1pilot.teleoperation.joystick:main',

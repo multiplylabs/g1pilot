@@ -186,16 +186,17 @@ class G1LocoClient(Node):
                 else:
                     self.log_once_attr("warn", "Cannot move arms to home, arm control mode is disabled.", "_warn_move_home_no_control_logged")
 
-            if msg.buttons[3] == 1 and self.prev_buttons[3] == 0:
-                self.robot.ShakeHand()
-                self.log_once_attr("info", "Robot is shaking hand.", "_shake_hand_logged")
-            if msg.buttons[3] == 0 and self.prev_buttons[3] == 1:
-                self.robot.ShakeHand()
-                self.clear_attr("_shake_hand_logged")
+            # JUST FOR DEMOS
+            # if msg.buttons[3] == 1 and self.prev_buttons[3] == 0:
+            #     self.robot.ShakeHand()
+            #     self.log_once_attr("info", "Robot is shaking hand.", "_shake_hand_logged")
+            # if msg.buttons[3] == 0 and self.prev_buttons[3] == 1:
+            #     self.robot.ShakeHand()
+            #     self.clear_attr("_shake_hand_logged")
 
-            if msg.buttons[13] == 1 and self.prev_buttons[13] == 0:
-                self.robot.WaveHand()
-                self.log_once_attr("info", "Robot is waving hand.", "_wave_hand_logged")
+            # if msg.buttons[13] == 1 and self.prev_buttons[13] == 0:
+            #     self.robot.WaveHand()
+            #     self.log_once_attr("info", "Robot is waving hand.", "_wave_hand_logged")
 
             # L1 -> Emergency stop
             if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:

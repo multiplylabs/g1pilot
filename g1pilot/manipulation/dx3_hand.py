@@ -59,10 +59,10 @@ class DX3Controller(Node):
             self.left_target = CLOSE_LEFT_VALUES if msg.data == "close" else OPEN_VALUES
 
     def left_callback(self, msg: HandState_):
-        pass
+        self.get_logger().debug(f'Left hand state received: {msg}')
 
     def right_callback(self, msg: HandState_):
-        pass
+        self.get_logger().debug(f'Right hand state received: {msg}')
 
     def create_cmd(self, values):
         cmd = unitree_hg_msg_dds__HandCmd_()

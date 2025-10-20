@@ -117,7 +117,7 @@ class G1_29_ArmController:
         self.q_target      = np.zeros(14)
         self.tauff_target  = np.zeros(14)
         self.kp_high = 300.0; self.kd_high = 3.0
-        self.kp_low  = 80.0;  self.kd_low  = 3.0
+        self.kp_low  = 150.0;  self.kd_low  = 4.0
         self.kp_wrist= 40.0;  self.kd_wrist= 1.5
 
         self.control_mode = False
@@ -343,10 +343,14 @@ class G1_29_ArmController:
             if not hasattr(self, "q_target") or len(self.q_target) != 14:
                 self.q_target = self.get_current_dual_arm_q().copy()
             if self.controlled_arms in ("right", "both"):
-                right_home = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=float)
+                right_home = np.array([0.6604386568069458, -0.09250623732805252, 0.022230736911296844,
+                               -0.839135468006134, 0.10722286254167557, 0.2716066539287567,
+                               0.06743379682302475], dtype=float)
                 self.q_target[7:14] = right_home
             if self.controlled_arms in ("left", "both"):
-                left_home = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=float)
+                left_home = np.array([0.9230489730834961, -0.06001700088381767, 0.03733086213469505,
+                              -0.7793461680412292, -0.06614094227552414, -0.11401312798261642,
+                              -0.29750025272369385], dtype=float)
                 self.q_target[0:7] = left_home
         print("[ArmGUI] Moving arms to home position", flush=True)
         time_start = time.time()
