@@ -53,7 +53,6 @@ setup(
         'console_scripts': [
             # States Nodes
             'robot_state = g1pilot.state.robot_state:main',
-            'state_publisher_29dof = g1pilot.state.state_publisher_29dof:main',
             'camera_pointcloud = g1pilot.state.camera_pointcloud:main',
 
             # Controllers Nodes

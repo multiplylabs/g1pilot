@@ -1,0 +1,19 @@
+general:
+  use_sim_time: false
+  use_robot: true
+  publish_joint_states: true
+  interface: eth0
+  sim_rate_hz: 50.0
+  arm_controlled: both
+  ui_joint: true
+
+robot:
+  model: normal
+  left_eff: dex3
+  left_eff_topic: /left_hand/command
+  right_eff: dex3
+  right_eff_topic: /right_hand/command
+
+teleoperation:
+  manual_topic: /g1pilot/joy_manual
+  autonomous_topic: /g1pilot/joy_autonomous

@@ -7,7 +7,7 @@ https://docs.ros.org/en/noetic/index.html)
 [![Ros Version](https://img.shields.io/badge/ROS2-Humble-green)](
 https://docs.ros.org/en/humble/index.html)
 
-G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basically is made to leave the robot lower body to the controller of unitree while providing all necessary tools to control the upper body and teleoperate the robot. It exposes two complementary control paths—Joint (low‑level, per‑joint) and Cartesian (end‑effector) and continuously publishes core robot state for monitoring and visualization in RViz.
+G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basically is made to leave the robot lower body to the controller of unitree while providing all necessary tools to control the upper body and teleoperate the robot. It exposes two complementary control Joint (low‑level, per‑joint) and Cartesian (end‑effector) and continuously publishes core robot state for monitoring and visualization in RViz.
 
 ## Highlights
 
@@ -25,13 +25,15 @@ G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basic
 
 - Navigation stack integrated: MOLA odometry and path planner for autonomous navigation.
 
-
 ## Visual Overview
+
+<img src="https://github.com/hucebot/g1pilot/blob/main/images/g1pilot.gif" alt="Static Sensors" width="800">
+
 | **Joint Controller** | **Cartesian Controller** |
 |---------------------|--------------------|
 | <img src="https://github.com/hucebot/g1pilot/blob/main/images/joint_controller.gif" alt="Static Sensors" width="400"> | <img src="https://github.com/hucebot/g1pilot/blob/main/images/cartesian_controller.gif" alt="Moving Sensors" width="400"> |
 | **Path Planner & Odometry** | **-** |
-| <img src="https://github.com/hucebot/g1pilot/blob/main/images/odometry_and_pathplanner.gif" alt="Path Planner" width="400"> | |
+| <img src="https://github.com/hucebot/g1pilot/blob/main/images/odometry_and_pathplanner.gif" alt="Path Planner" width="400"> | - |
 
 ## Table of Contents
 - [Pre-requisites](#pre-requisites)
@@ -42,11 +44,11 @@ G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basic
 - [License](#license)
 
 ## Pre-requisites
-- Be connected to the robot via WiFi or Ethernet. **It's important to know which interface you are using.**
+- Be connected to the robot via Ethernet. **It's important to know which interface you are using.**
 
 ## Quick Start
 ### Docker (recommended)
-We prepare two docker images to build and run the package. One is for building in the laptop, and the other is for running in the robot. Both images
+We prepare two docker images to build and run the package. One is for building in the teleoperation station, and the other is for running in the robot. Both images
 are located in the `docker` folder. You can build and run the images with the provided scripts.
 To build the docker image in the laptop, run the following command:
   ```bash
@@ -68,20 +70,18 @@ To run the docker image in the robot with the following command:
   sh run_camera.sh
   ```
 
-### Package Layout
-
-``` bash
-.
-├─ g1pilot/                 # Python nodes
-├─ description_files/       # URDF/Xacro, meshes
-├─ config/                  # RViz and node configs
-├─ launch/                  # Launchers (RViz, controllers, state)
-├─ docker/                  # Build/run scripts
-└─ images/                  # README visuals
-```
-
 ## 🧠 Nodes Overview
-TODO
+
+- **robot_state**: Publishes the state of the robot, including joint positions, velocities, and efforts and custom message to visualize the temperature and voltage of each motor.
+- **interactive_marker**: Provides an interactive marker in RViz to control the end-effector position and orientation in Cartesian space.
+- **dx3_controller**: Node to control the DEX3 Unitree hand, allowing to open and close the hand using ROS2 commands.
+- **joystick**: Node to teleoperate the robot using a joystick, mapping joystick inputs to robot commands.
+- **joy_mux**: Multiplexer for joystick inputs, allowing to switch between different control modes, specifcally made to provide autonomous navigation and teleoperation using the same joystick.
+- **loco_client**: Client node to communicate with the Unitree loco controller, providing high-level commands for walking and balancing and low-level commands for joint control and cartesian control.
+- **dijkstra_planner**: Custom path planner using Dijkstra's algorithm to compute optimal paths for the robot to follow in a given environment with a look ahead distance parameter to smooth the path and improve navigation performance.
+- **nav2point**: Node to integrate the planner with the navigation stack, converting navigation goals into waypoints for the robot to follow.
+- **create_map**: Dummy node to create a 2D occupancy grid map from the robot's sensors, used for navigation and obstacle avoidance. 
+- **mola_fixed**: Node to interface with the MOLA odometry system, transform the odometry data into g1 frame.
 
 ## Usage
 Once you have the docker image running, you can run the following command to start the unitree node:

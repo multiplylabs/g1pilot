@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -yy \
     ros-${ROS_DISTRO}-xacro \
     ros-${ROS_DISTRO}-rviz2 \
     ros-${ROS_DISTRO}-pcl-conversions \
-    ros-${ROS_DISTRO}-joy \
     libpcl-dev \
     terminator \
     git \
@@ -25,13 +24,7 @@ RUN apt update
 RUN apt install ros-${ROS_DISTRO}-rosidl-default-generators -y
 
 WORKDIR /ros2_ws/src
-RUN git clone https://github.com/CDonosoK/astroviz_interfaces.git
-RUN apt update
 RUN apt install ros-${ROS_DISTRO}-rmw-cyclonedds-cpp -y
-
-RUN apt-get update && apt-get upgrade -y
-RUN apt install -y python3-gi gstreamer1.0-tools \
-  gstreamer1.0-plugins-* gstreamer1.0-libav
 
 RUN pip install --upgrade pyrealsense2 numpy opencv-python
 WORKDIR /
