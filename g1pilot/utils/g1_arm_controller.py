@@ -283,7 +283,7 @@ class G1_29_ArmController:
                     urdf_path = urdf_path or os.path.join(pkg_share, 'description_files', 'urdf', '29dof.urdf')
                     mesh_dir  = mesh_dir  or os.path.join(pkg_share, 'description_files', 'meshes')
                 except Exception:
-                    pass
+                    self.get_logger().warning("Cannot find package 'g1pilot' for URDF path.")
 
             if urdf_path and os.path.exists(urdf_path):
                 self.model, _, _ = self.pin.buildModelsFromUrdf(urdf_path, package_dirs=[mesh_dir] if mesh_dir else [])
@@ -343,16 +343,12 @@ class G1_29_ArmController:
             if not hasattr(self, "q_target") or len(self.q_target) != 14:
                 self.q_target = self.get_current_dual_arm_q().copy()
             if self.controlled_arms in ("right", "both"):
-                right_home = np.array([0.6604386568069458, -0.09250623732805252, 0.022230736911296844,
-                               -0.839135468006134, 0.10722286254167557, 0.2716066539287567,
-                               0.06743379682302475], dtype=float)
+                right_home = np.array([20, 20, 20, 20, 20, 20, 20], dtype=float)
                 self.q_target[7:14] = right_home
             if self.controlled_arms in ("left", "both"):
-                left_home = np.array([0.9230489730834961, -0.06001700088381767, 0.03733086213469505,
-                              -0.7793461680412292, -0.06614094227552414, -0.11401312798261642,
-                              -0.29750025272369385], dtype=float)
+                left_home = np.array([20, 20, 20, 20, 20, 20, 20], dtype=float)
                 self.q_target[0:7] = left_home
-        print("[ArmGUI] Moving arms to home position", flush=True)
+        self._ros_node.get_logger().info("[ArmGUI] Moving arms to home position")
         time_start = time.time()
         while time.time() - time_start < 5.0:
             with self.ctrl_lock:
@@ -360,7 +356,7 @@ class G1_29_ArmController:
                 if np.all(np.abs(cur_q - self.q_target) < 0.05):
                     break
             time.sleep(0.05)
-        print("[ArmGUI] Move to home done", flush=True)
+        self._ros_node.get_logger().info("[ArmGUI] Move to home done")
 
     def _get_gui_initial_q(self):
         try:
@@ -511,7 +507,7 @@ class G1_29_ArmController:
             tf = self._tf_buffer.lookup_transform(target, src, Time(), timeout=Duration(seconds=0.2))
             return do_transform_pose(ps, tf)
         except Exception as e:
-            print(f"[IK] WARN TF {src} -> {target} failed: {e}. Using pose.", flush=True)
+            self._ros_node.get_logger().warning(f"[IK] TF {src} -> {target} failed: {e}. Using pose.")
             return ps
 
     def _fk_current_ee(self, side):
@@ -583,7 +579,7 @@ class G1_29_ArmController:
                     else:
                         self._T_off_left_auto  = T_auto; self._auto_done_left  = True
                     t = T_auto.translation
-                    print(f"[IK] auto-calibrated {side}: d=({t[0]:.3f},{t[1]:.3f},{t[2]:.3f})", flush=True)
+                    self._ros_node.get_logger().info(f"[IK] auto-calibrated {side}: d=({t[0]:.3f},{t[1]:.3f},{t[2]:.3f})")
 
             T_raw = T_goal_in * T_static * (T_auto if T_auto is not None else self.SE3.Identity())
 
@@ -595,7 +591,7 @@ class G1_29_ArmController:
                 self._ik_goal_left  = self._lowpass_goal(self._ik_goal_left, T_raw, self._goal_filter_alpha)
 
         except Exception as e:
-            print(f"[IK] target_cb error: {e}", flush=True)
+            self._ros_node.get_logger().error(f"[IK] target_cb error: {e}")
 
     def _ordered_1d_names(self):
         out = []
