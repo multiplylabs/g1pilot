@@ -7,8 +7,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 import os
 
 package_name = "g1pilot"
-urdf_file_name = "g1_29dof.urdf"
-rviz_config_file_name = "g1_29dof.rviz"
+urdf_file_name = "29dof.urdf"
+rviz_config_file_name = "29dof.rviz"
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
@@ -26,9 +26,9 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false",
                               description="Use simulation (Gazebo) clock if true"),
-        DeclareLaunchArgument("use_robot", default_value="true",
+        DeclareLaunchArgument("use_robot", default_value="false",
                               description="Connect to real robot if true"),
-        DeclareLaunchArgument("publish_joint_states", default_value="true",
+        DeclareLaunchArgument("publish_joint_states", default_value="false",
                               description="Publish joint_states from node"),
         DeclareLaunchArgument("interface", default_value="eth0",
                               description="Network interface for Unitree SDK"),
@@ -46,15 +46,6 @@ def generate_launch_description():
                 'use_robot': ParameterValue(use_robot, value_type=bool),
                 'sim_rate_hz': ParameterValue(sim_rate_hz, value_type=float),
                 'publish_joint_states': ParameterValue(publish_joint_states, value_type=bool),
-            }],
-            output='screen'
-        ),
-
-        Node(
-            package='g1pilot',
-            executable='camera_pointcloud',
-            name='camera_pointcloud',
-            parameters=[{
             }],
             output='screen'
         ),

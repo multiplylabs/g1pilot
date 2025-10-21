@@ -16,10 +16,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("interface", default_value="eth0"),
-        DeclareLaunchArgument("use_robot", default_value="true"),
+        DeclareLaunchArgument("use_robot", default_value="false"),
         DeclareLaunchArgument("arm_controlled", default_value="both"),
         DeclareLaunchArgument("enable_arm_ui", default_value="true"),
-        DeclareLaunchArgument("ik_use_waist", default_value="true"),
+        DeclareLaunchArgument("ik_use_waist", default_value="false"),
         DeclareLaunchArgument("ik_alpha", default_value="0.2"),
         DeclareLaunchArgument("ik_max_dq_step", default_value="0.05"),
         DeclareLaunchArgument("arm_velocity_limit", default_value="2.0"),

@@ -5,15 +5,75 @@ general:
   interface: eth0
   sim_rate_hz: 50.0
   arm_controlled: both
-  ui_joint: true
+  enable_arm_ui: true
+  use_waist: false
+  frame_link: pelvis
+  use_mola: true
+  use_livox: true
+
+inverse_kinematics:
+  alpha: 0.2
+  max_dq_step: 0.05
+  velocity_limit: 2.0
+  kp_high: 300
+  kd_high: 3.0
+  kp_low: 150
+  kd_low: 4.0
+  kp_wrist: 40.0
+  kd_wrist: 1.5
+
+home:
+  right:
+    motor_1: 0.6604386568069458
+    motor_2: -0.09250623732805252
+    motor_3: 0.022230736911296844
+    motor_4: -0.839135468006134
+    motor_5: 0.10722286254167557
+    motor_6: 0.2716066539287567
+    motor_7: 0.06743379682302475
+  left:
+    motor_1: 0.9230489730834961
+    motor_2: -0.06001700088381767
+    motor_3: 0.03733086213469505
+    motor_4: -0.7793461680412292
+    motor_5: -0.06614094227552414
+    motor_6: -0.11401312798261642
+    motor_7: -0.29750025272369385
 
 robot:
-  model: normal
-  left_eff: dex3
-  left_eff_topic: /left_hand/command
-  right_eff: dex3
-  right_eff_topic: /right_hand/command
+  model: 29dof #29dof_dex3
+  left_eff_topic: /g1pilot/left_hand_goal
+  left_tf_frame: left_hand_point_contact
+  right_eff_topic: /g1pilot/right_hand_goal
+  right_tf_frame: right_hand_point_contact
+  start_topic: /g1pilot/start
+  balance_topic: /g1pilot/balance
+  emergency_stop_topic: /g1pilot/emergency_stop
 
-teleoperation:
+state:
+  imu_topic: /g1pilot/imu
+  imu_link: imu_link
+  motors_topic: /g1pilot/motor_state
+  odom_topic: /g1pilot/odom
+  voice_topic: /g1pilot/voice
+
+dex3:
+  righ_cmd_topic: rt/dex3/right/cmd
+  right_state_topic: rt/dex3/right/state
+  left_cmd_topic: rt/dex3/left/cmd
+  left_state_topic: rt/dex3/left/state
+
+navigation:
+  joystick_type: Wireless Controller
+  map_topic: /map
+  odom_topic: /lidar_odometry/pose_fixed
+  goal_topic: /g1pilot/goal
+  goal_marker_topic: /g1pilot/goal/marker
+  path_topic: /g1pilot/path
   manual_topic: /g1pilot/joy_manual
   autonomous_topic: /g1pilot/joy_autonomous
+  autonomous_enabled_topic: /g1pilot/auto_enable
+  vx_limit: 0.6
+  vy_limit: 0.6
+  wz_limit: 0.5
+  #TODO: See Dijkstra - Nav2Goal - JoyMux

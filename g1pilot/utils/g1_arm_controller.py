@@ -280,7 +280,7 @@ class G1_29_ArmController:
             if urdf_path is None or mesh_dir is None:
                 try:
                     pkg_share = get_package_share_directory('g1pilot')
-                    urdf_path = urdf_path or os.path.join(pkg_share, 'description_files', 'urdf', 'g1_29dof.urdf')
+                    urdf_path = urdf_path or os.path.join(pkg_share, 'description_files', 'urdf', '29dof.urdf')
                     mesh_dir  = mesh_dir  or os.path.join(pkg_share, 'description_files', 'meshes')
                 except Exception:
                     pass

@@ -53,7 +53,6 @@ setup(
         'console_scripts': [
             # States Nodes
             'robot_state = g1pilot.state.robot_state:main',
-            'camera_pointcloud = g1pilot.state.camera_pointcloud:main',
 
             # Controllers Nodes
             'interactive_marker = g1pilot.controller.interactive_marker:main',

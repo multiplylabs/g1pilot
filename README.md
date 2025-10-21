@@ -2,10 +2,9 @@
 
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](
 https://opensource.org/licenses/BSD-3-Clause)
-[![Ros Version](https://img.shields.io/badge/ROS1-Noetic-red)](
-https://docs.ros.org/en/noetic/index.html)
 [![Ros Version](https://img.shields.io/badge/ROS2-Humble-green)](
 https://docs.ros.org/en/humble/index.html)
+[![GitHub Stars](https://img.shields.io/github/stars/Hucebot/astroviz?style=social)](https://github.com/CDonosoK/astroviz/stargazers)
 
 G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basically is made to leave the robot lower body to the controller of unitree while providing all necessary tools to control the upper body and teleoperate the robot. It exposes two complementary control Joint (low‑level, per‑joint) and Cartesian (end‑effector) and continuously publishes core robot state for monitoring and visualization in RViz.
 
@@ -32,8 +31,8 @@ G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basic
 | **Joint Controller** | **Cartesian Controller** |
 |---------------------|--------------------|
 | <img src="https://github.com/hucebot/g1pilot/blob/main/images/joint_controller.gif" alt="Static Sensors" width="400"> | <img src="https://github.com/hucebot/g1pilot/blob/main/images/cartesian_controller.gif" alt="Moving Sensors" width="400"> |
-| **Path Planner & Odometry** | **-** |
-| <img src="https://github.com/hucebot/g1pilot/blob/main/images/odometry_and_pathplanner.gif" alt="Path Planner" width="400"> | - |
+| **Path Planner & Odometry** | **Finite State Machine** |
+| <img src="https://github.com/hucebot/g1pilot/blob/main/images/odometry_and_pathplanner.gif" alt="Path Planner" width="400"> | TODO |
 
 ## Table of Contents
 - [Pre-requisites](#pre-requisites)
