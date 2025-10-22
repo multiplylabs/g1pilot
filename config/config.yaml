@@ -58,10 +58,20 @@ state:
   voice_topic: /g1pilot/voice
 
 dex3:
-  righ_cmd_topic: rt/dex3/right/cmd
+  right_cmd_topic: rt/dex3/right/cmd
   right_state_topic: rt/dex3/right/state
+  right_hand_topic: /g1pilot/dx3/right/hand_action
   left_cmd_topic: rt/dex3/left/cmd
   left_state_topic: rt/dex3/left/state
+  left_hand_topic: /g1pilot/dx3/left/hand_action
+
+manipulation:
+  right_point_topic: /g1pilot/right_point_goal
+  right_point_received_topic: /g1pilot/right_point/received
+  right_point_reached_topic: /g1pilot/right_point/reached
+  left_point_topic: /g1pilot/left_point_goal
+  left_point_received_topic: /g1pilot/left_point/received
+  left_point_reached_topic: /g1pilot/left_point/reached
 
 navigation:
   joystick_type: Wireless Controller
@@ -69,6 +79,9 @@ navigation:
   odom_topic: /lidar_odometry/pose_fixed
   goal_topic: /g1pilot/goal
   goal_marker_topic: /g1pilot/goal/marker
+  goal_received_topic: /g1pilot/goal/received
+  goal_reached_topic: /g1pilot/goal/reached
+  goal_start_topic: /g1pilot/goal/start
   path_topic: /g1pilot/path
   manual_topic: /g1pilot/joy_manual
   autonomous_topic: /g1pilot/joy_autonomous

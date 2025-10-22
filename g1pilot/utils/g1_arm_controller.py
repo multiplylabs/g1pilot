@@ -818,6 +818,19 @@ class G1_29_ArmController:
                         js.position = [self.sim_current_q_all[i] for i in range(29)]
                         self._joint_pub.publish(js)
 
+                if self._gui is not None and self.control_mode:
+                    if self.use_robot:
+                        current_q = self.get_current_dual_arm_q()
+                    else:
+                        left = [self.sim_current_q_all[j] for j in LEFT_JOINT_INDICES_LIST]
+                        right = [self.sim_current_q_all[j] for j in RIGHT_JOINT_INDICES_LIST]
+                        current_q = np.array(left + right, dtype=float)
+                    gui_vals = []
+                    for jid in self.gui_joint_ids:
+                        dual_idx = JOINTID_TO_DUALINDEX[jid]
+                        gui_vals.append(float(current_q[dual_idx]))
+                    self._bridge.runSignal.emit(lambda: self._gui.set_slider_values(gui_vals))
+
                 if self._speed_gradual_max:
                     t_elapsed = time.time() - start
                     self.arm_velocity_limit = 20.0 + 10.0 * min(1.0, t_elapsed / 5.0)

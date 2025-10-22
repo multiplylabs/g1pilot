@@ -92,6 +92,17 @@ class ArmGUI(QtWidgets.QWidget):
             rad = math.radians(sld.value()); vals_rad.append(float(np.clip(rad, lo_rad, hi_rad)))
         self.valuesChanged.emit(vals_rad)
 
+    def set_slider_values(self, values):
+        if len(values) != len(self.sliders):
+            return
+        for s, v, label in zip(self.sliders, values, self.value_labels):
+            s.blockSignals(True)
+            deg = math.degrees(v)
+            s.setValue(int(deg))
+            label.setText(f"{deg:.1f}°")
+            s.blockSignals(False)
+
+
     def _center_all(self):
         for sld, jidx in zip(self.sliders, self.joint_ids):
             lo_deg = int(round(math.degrees(JOINT_LIMITS_RAD[jidx][0])))
