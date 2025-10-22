@@ -59,6 +59,7 @@ setup(
 
             # Manipulation Nodes
             'dx3_controller = g1pilot.manipulation.dx3_hand:main',
+            'arm_controller = g1pilot.manipulation.arm_controller:main',
 
             # Teleoperation Nodes
             'joystick = g1pilot.teleoperation.joystick:main',

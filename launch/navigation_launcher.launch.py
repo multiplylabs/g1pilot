@@ -54,6 +54,17 @@ def generate_launch_description():
 
         Node(
             package='g1pilot',
+            executable='arm_controller',
+            name='arm_controller',
+            parameters=[{
+                'interface': interface,
+                'use_robot': ParameterValue(use_robot, value_type=bool),
+            }],
+            output='screen'
+        ),
+
+        Node(
+            package='g1pilot',
             executable='dijkstra_planner',
             name='dijkstra_planner',
             parameters=[{
