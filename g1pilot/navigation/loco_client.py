@@ -7,7 +7,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from sensor_msgs.msg import Joy
 from PyQt5 import QtWidgets, QtCore
 
@@ -79,6 +79,8 @@ class G1LocoClient(Node):
         self.create_subscription(Joy, '/g1pilot/joy', self.joystick_callback, 10)
 
         self.publisher_arms_controlled = self.create_publisher(Bool, '/g1pilot/arms_controlled', 1)
+        self.right_gripper_pub = self.create_publisher(String, '/g1pilot/dx3/right/hand_action', 1)
+        self.left_gripper_pub = self.create_publisher(String, '/g1pilot/dx3/left/hand_action', 1)
         self.publisher_homming_arms = self.create_publisher(Bool, '/g1pilot/homming_arms', 1)
 
     def _log_once(self, level, msg, key):
@@ -200,6 +202,21 @@ class G1LocoClient(Node):
                 self.publisher_arms_controlled.publish(Bool(data=False))
             if self._btn_falling(msg, 5):
                 self._clear_once("_e_stop_button_pressed_logged")
+
+            # Gripper controls
+            if msg.axes[4] ==1.0 and self._btn_rising(msg, 3):
+                self._log_once("info", "Open right gripper.", "_open_right_gripper_logged")
+                self.right_gripper_pub.publish(String(data="open"))
+            if msg.axes[4] ==1.0 and self._btn_falling(msg, 3):
+                self._log_once("info", "Close right gripper.", "_close_right_gripper_logged")
+                self.right_gripper_pub.publish(String(data="close"))
+
+            if msg.axes[4] ==-1.0 and self._btn_rising(msg, 3):
+                self._log_once("info", "Open left gripper.", "_open_left_gripper_logged")
+                self.left_gripper_pub.publish(String(data="open"))
+            if msg.axes[4] ==-1.0 and self._btn_falling(msg, 3):
+                self._log_once("info", "Close left gripper.", "_close_left_gripper_logged")
+                self.left_gripper_pub.publish(String(data="close"))
 
             if self._btn_rising(msg, 6):
                 if not self.balanced:

@@ -54,10 +54,8 @@ setup(
             # States Nodes
             'robot_state = g1pilot.state.robot_state:main',
 
-            # Controllers Nodes
-            'interactive_marker = g1pilot.controller.interactive_marker:main',
-
             # Manipulation Nodes
+            'interactive_marker = g1pilot.manipulation.interactive_marker:main',
             'dx3_controller = g1pilot.manipulation.dx3_hand:main',
             'arm_controller = g1pilot.manipulation.arm_controller:main',
 
