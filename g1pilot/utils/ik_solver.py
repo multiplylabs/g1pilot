@@ -232,6 +232,34 @@ class G1IKSolver:
     # Public API
     # --------------------------------------------------------
 
+    def set_current_configuration(self, q_dict: dict):
+        """
+        Manually set the current joint configuration for the solver.
+        This is useful to reset the internal state (e.g., after homing).
+
+        Parameters
+        ----------
+        q_dict : dict
+            Dictionary with optional keys 'left' and/or 'right', each
+            containing a 7-element numpy array of joint angles in radians.
+        """
+        q_full = pin.neutral(self.model)
+
+        if 'left' in q_dict:
+            for i, arm_i in enumerate(LEFT_JOINT_INDICES_LIST):
+                q_full[self._name_to_q_index[self._ros_joint_names[arm_i]]] = q_dict['left'][i]
+
+        if 'right' in q_dict:
+            for i, arm_i in enumerate(RIGHT_JOINT_INDICES_LIST):
+                q_full[self._name_to_q_index[self._ros_joint_names[arm_i]]] = q_dict['right'][i]
+
+        self._prev_q_full = q_full.copy()
+        self._prev_q14 = np.concatenate([
+            q_dict.get('left', np.zeros(7)),
+            q_dict.get('right', np.zeros(7))
+        ])
+
+
     def set_goal(self, side, T_goal: SE3):
         """Set a new SE3 target for the given side ('left' or 'right')."""
         if side == "right":

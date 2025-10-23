@@ -46,6 +46,8 @@ class ArmController(Node):
         self.homing_active = False
         self.homing_reached = False
         self.homing_tolerance = 0.02
+        self._last_left_goal = None
+        self._last_right_goal = None
 
         # --- IK Solver ---
         self.ik_solver = G1IKSolver(debug=False)
@@ -56,13 +58,13 @@ class ArmController(Node):
 
         # --- Home positions ---
         self.home_right = np.array([
-            0.6604386568069458,
-            -0.09250623732805252,
-            0.022230736911296844,
-            -0.839135468006134,
-            0.10722286254167557,
-            0.2716066539287567,
-            0.06743379682302475,
+            0.9230489730834961,
+            -0.06001700088381767,
+            0.03733086213469505,
+            -0.7793461680412292,
+            -0.06614094227552414,
+            -0.11401312798261642,
+            -0.29750025272369385,
         ])
         self.home_left = np.array([
             0.9230489730834961,
@@ -138,12 +140,21 @@ class ArmController(Node):
             return
         if self.homing_reached:
             self.homing_reached = False
+            self.ik_solver.set_current_configuration({
+                "left": self._last_q_target[0:7].copy(),
+                "right": self._last_q_target[7:14].copy()
+            })
 
         msg_tf = self._transform_pose_to_world(msg)
         o, p = msg_tf.pose.orientation, msg_tf.pose.position
         q = pin.Quaternion(o.w, o.x, o.y, o.z)
         T_goal = SE3(q.matrix(), np.array([p.x, p.y, p.z]))
+
+        self._last_right_goal = T_goal
         self.ik_solver.set_goal("right", T_goal)
+        if self._last_left_goal is not None:
+            self.ik_solver._goal_left = self._last_left_goal
+
 
     def _left_goal_callback(self, msg: PoseStamped):
         """
@@ -161,13 +172,22 @@ class ArmController(Node):
         if self.homing_active:
             return
         if self.homing_reached:
-            self.homing_reached = False 
+            self.homing_reached = False
+            self.ik_solver.set_current_configuration({
+                "left": self._last_q_target[0:7].copy(),
+                "right": self._last_q_target[7:14].copy()
+            })
 
         msg_tf = self._transform_pose_to_world(msg)
         o, p = msg_tf.pose.orientation, msg_tf.pose.position
         q = pin.Quaternion(o.w, o.x, o.y, o.z)
         T_goal = SE3(q.matrix(), np.array([p.x, p.y, p.z]))
+
+        self._last_left_goal = T_goal
         self.ik_solver.set_goal("left", T_goal)
+        if self._last_right_goal is not None:
+            self.ik_solver._goal_right = self._last_right_goal
+
 
     def _transform_pose_to_world(self, ps):
         """
@@ -217,10 +237,56 @@ class ArmController(Node):
 
         if self.homing_active:
             q_target = np.concatenate((self.home_left, self.home_right))
+            err = np.linalg.norm(q_target - self._last_q_target)
+            if err < self.homing_tolerance:
+                self.homing_active = False
+                self.homing_reached = True
+                self._last_q_target = q_target.copy()
+
+                if hasattr(self.ik_solver, "clear_goals"):
+                    self.ik_solver.clear_goals()
+
+                self.ik_solver.set_current_configuration({
+                    "left": self.home_left.copy(),
+                    "right": self.home_right.copy()
+                })
+
+                try:
+                    q_full = pin.neutral(self.ik_solver.model)
+                    for i, arm_i in enumerate(LEFT_JOINT_INDICES_LIST):
+                        q_full[self.ik_solver._name_to_q_index[self.ik_solver._ros_joint_names[arm_i]]] = self.home_left[i]
+                    for i, arm_i in enumerate(RIGHT_JOINT_INDICES_LIST):
+                        q_full[self.ik_solver._name_to_q_index[self.ik_solver._ros_joint_names[arm_i]]] = self.home_right[i]
+
+                    pin.forwardKinematics(self.ik_solver.model, self.ik_solver.data, q_full)
+                    pin.updateFramePlacements(self.ik_solver.model, self.ik_solver.data)
+
+                    T_left = self.ik_solver.data.oMf[self.ik_solver._fid_left]
+                    T_right = self.ik_solver.data.oMf[self.ik_solver._fid_right]
+
+                    self.ik_solver._goal_left = T_left.copy()
+                    self.ik_solver._goal_right = T_right.copy()
+
+                    self._last_left_goal = T_left.copy()
+                    self._last_right_goal = T_right.copy()
+
+
+                    self.get_logger().info("IK solver goals aligned with home pose.")
+                except Exception as e:
+                    self.get_logger().warn(f"Failed to align IK goals with home: {e}")
+
+                self.get_logger().info("Home position reached.")
+
         elif self.homing_reached:
             q_target = np.concatenate((self.home_left, self.home_right))
+
         else:
             current_all = np.zeros(29, dtype=float)
+            for idx, joint_idx in enumerate(LEFT_JOINT_INDICES_LIST):
+                current_all[joint_idx] = self._last_q_target[idx]
+            for idx, joint_idx in enumerate(RIGHT_JOINT_INDICES_LIST):
+                current_all[joint_idx] = self._last_q_target[7 + idx]
+
             q_dict = self.ik_solver.get_joint_targets(current_all)
             q_target = np.zeros(14, dtype=float)
             if "left" in q_dict:
@@ -233,16 +299,6 @@ class ArmController(Node):
         dq = np.clip(q_target - self._last_q_target, -max_step, max_step)
         q_smooth = self._last_q_target + dq
         self._last_q_target = q_smooth.copy()
-
-        if self.homing_active:
-            err = np.linalg.norm(q_smooth - np.concatenate((self.home_left, self.home_right)))
-            if err < self.homing_tolerance:
-                self.homing_active = False
-                self.homing_reached = True
-                self._last_q_target = np.concatenate((self.home_left, self.home_right)).copy()
-                if hasattr(self.ik_solver, "clear_goals"):
-                    self.ik_solver.clear_goals()
-                self.get_logger().info("Home position reached.")
 
         js = JointState()
         js.header.stamp = self.get_clock().now().to_msg()

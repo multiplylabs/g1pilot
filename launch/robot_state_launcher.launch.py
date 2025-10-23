@@ -26,9 +26,9 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false",
                               description="Use simulation (Gazebo) clock if true"),
-        DeclareLaunchArgument("use_robot", default_value="true",
+        DeclareLaunchArgument("use_robot", default_value="false",
                               description="Connect to real robot if true"),
-        DeclareLaunchArgument("publish_joint_states", default_value="true",
+        DeclareLaunchArgument("publish_joint_states", default_value="false",
                               description="Publish joint_states from node"),
         DeclareLaunchArgument("interface", default_value="eth0",
                               description="Network interface for Unitree SDK"),
