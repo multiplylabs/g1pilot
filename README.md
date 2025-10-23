@@ -81,6 +81,7 @@ To run the docker image in the robot with the following command:
 - **nav2point**: Node to integrate the planner with the navigation stack, converting navigation goals into waypoints for the robot to follow.
 - **create_map**: Dummy node to create a 2D occupancy grid map from the robot's sensors, used for navigation and obstacle avoidance. 
 - **mola_fixed**: Node to interface with the MOLA odometry system, transform the odometry data into g1 frame.
+- **arm_controller**: Node to control the upper body of the robot, providing joint and cartesian control modes for the arms.
 
 ## Usage
 Once you have the docker image running, you can run the following command to start the unitree node:

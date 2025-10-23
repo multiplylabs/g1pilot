@@ -7,10 +7,9 @@ import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from sensor_msgs.msg import Joy
-from PyQt5 import QtWidgets
-from PyQt5 import QtCore
+from PyQt5 import QtWidgets, QtCore
 
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -18,8 +17,6 @@ from unitree_sdk2py.g1.loco.g1_loco_api import (
     ROBOT_API_ID_LOCO_GET_FSM_ID,
     ROBOT_API_ID_LOCO_GET_FSM_MODE,
 )
-
-from g1pilot.utils.g1_arm_controller import G1_29_ArmController
 
 
 def _rpc_get_int(client, api_id):
@@ -33,21 +30,20 @@ def _rpc_get_int(client, api_id):
 
 
 class G1LocoClient(Node):
-    def __init__(self, ui_bridge=None):
+    def __init__(self):
         super().__init__("loco_client")
         self.robot_stopped = False
         self.balanced = False
         self.prev_buttons = {}
         self.prev_axis_last = None
         self.control_arms = False
-        self.ui_bridge = ui_bridge
 
         self.declare_parameter('use_robot', True)
         self.use_robot = bool(self.get_parameter('use_robot').value)
 
         self.declare_parameter('interface', 'eth0')
         interface = self.get_parameter('interface').get_parameter_value().string_value
-        self.declare_parameter('arm_controlled', 'both')  # Options: 'left', 'right', 'both'
+        self.declare_parameter('arm_controlled', 'both')
         self.arm_controlled = self.get_parameter('arm_controlled').get_parameter_value().string_value
         self.declare_parameter('enable_arm_ui', True)
         self.enable_arm_ui = self.get_parameter('enable_arm_ui').get_parameter_value().bool_value
@@ -74,42 +70,51 @@ class G1LocoClient(Node):
             self.get_logger().info(f"Current FSM ID: {self.current_id}, Mode: {self.current_mode}")
         else:
             self.robot = None
-            self.current_id = 4 
+            self.current_id = 4
             self.current_mode = 0
             self.get_logger().info("use_robot:=false -> Not connecting to robot.")
-
-        self.arm_control = G1_29_ArmController(
-            ui_bridge=self.ui_bridge,
-            controlled_arms=self.arm_controlled,
-            show_ui=self.enable_arm_ui,
-            ros_node=self,
-            ik_use_waist=ik_use_waist,
-            ik_alpha=ik_alpha,
-            ik_max_dq_step=ik_max_dq_step,
-            arm_velocity_limit=arm_vel_lim,
-        )
 
         self.create_subscription(Bool, 'emergency_stop', self.emergency_callback, 10)
         self.create_subscription(Bool, 'start_balancing', self.start_balancing_callback, 10)
         self.create_subscription(Joy, '/g1pilot/joy', self.joystick_callback, 10)
 
-    def log_once_attr(self, level, msg, attr):
-        if hasattr(self, attr):
+        self.publisher_arms_controlled = self.create_publisher(Bool, '/g1pilot/arms_controlled', 1)
+        self.right_gripper_pub = self.create_publisher(String, '/g1pilot/dx3/right/hand_action', 1)
+        self.left_gripper_pub = self.create_publisher(String, '/g1pilot/dx3/left/hand_action', 1)
+        self.publisher_homming_arms = self.create_publisher(Bool, '/g1pilot/homming_arms', 1)
+
+    def _log_once(self, level, msg, key):
+        if getattr(self, key, False):
             return
-        setattr(self, attr, True)
+        setattr(self, key, True)
+
         logger = self.get_logger()
         if level == "info":
             logger.info(msg)
-        elif level in ("warn", "warning"):
+        elif level == "warn":
             logger.warn(msg)
         elif level == "error":
             logger.error(msg)
+        elif level == "debug":
+            logger.debug(msg)
         else:
             logger.info(msg)
 
-    def clear_attr(self, attr):
-        if hasattr(self, attr):
-            delattr(self, attr)
+
+    def _clear_once(self, key):
+        if hasattr(self, key):
+            delattr(self, key)
+
+    def _btn_rising(self, msg, idx):
+        prev = self.prev_buttons.get(idx, 0)
+        return msg.buttons[idx] == 1 and prev == 0
+
+    def _btn_falling(self, msg, idx):
+        prev = self.prev_buttons.get(idx, 0)
+        return msg.buttons[idx] == 0 and prev == 1
+
+    def _axis_edge(self, cur, prev, val):
+        return cur == val and prev != val, cur != val and prev == val
 
     def get_fsm_id(self):
         if not self.use_robot or self.robot is None:
@@ -123,115 +128,117 @@ class G1LocoClient(Node):
 
     def emergency_callback(self, msg: Bool):
         if msg.data:
-            self.log_once_attr("warn", "EMERGENCY STOP ACTIVATED!", "_e_stop_activated_logged")
+            self._log_once("warn", "EMERGENCY STOP ACTIVATED!", "_e_stop_activated_logged")
             self.robot_stopped = True
             self.balanced = False
             if self.use_robot and self.robot is not None:
                 self.robot.Damp()
             if self.control_arms:
                 self.control_arms = False
-                self.arm_control.set_control_mode(False)
+                self.publisher_arms_controlled.publish(Bool(data=False))
         else:
-            self.clear_attr("_e_stop_activated_logged")
+            self._clear_once("_e_stop_activated_logged")
 
     def start_balancing_callback(self, msg: Bool):
         if msg.data and not self.balanced:
-            self.log_once_attr("info", "Starting balancing procedure...", "_start_balance_req_logged")
+            self._log_once("info", "Starting balancing procedure...", "_start_balance_req_logged")
             self.entering_balancing(max_height=0.5, step=0.02)
-            self.log_once_attr("info", "Balancing procedure completed.", "_balance_completed_logged")
+            self._log_once("info", "Balancing procedure completed.", "_balance_completed_logged")
         elif self.balanced:
-            self.log_once_attr("info", "Already balanced, no action taken.", "_already_balanced_notice_logged")
+            self._log_once("info", "Already balanced, no action taken.", "_already_balanced_notice_logged")
 
     def joystick_callback(self, msg: Joy):
         try:
             if not self.prev_buttons:
                 self.prev_buttons = {i: 0 for i in range(len(msg.buttons))}
+
             if not self.balanced:
-                self.log_once_attr("warn", "Robot is not balanced, cannot move.", "_warn_not_balanced_logged")
+                self._log_once("warn", "Robot is not balanced, cannot move.", "_warn_not_balanced_logged")
             else:
-                self.clear_attr("_warn_not_balanced_logged")
+                self._clear_once("_warn_not_balanced_logged")
+
             if self.robot_stopped:
-                self.log_once_attr("warn", "Robot is stopped, cannot move.", "_warn_robot_stopped_logged")
+                self._log_once("warn", "Robot is stopped, cannot move.", "_warn_robot_stopped_logged")
             else:
-                self.clear_attr("_warn_robot_stopped_logged")
+                self._clear_once("_warn_robot_stopped_logged")
 
             axis_last = msg.axes[-1] if len(msg.axes) else 0.0
             if self.prev_axis_last is None:
                 self.prev_axis_last = axis_last
 
-            # UP CHANGE FSM ID 4 (Standby)
-            if axis_last == -1.0 and self.prev_axis_last != -1.0:
+            up_on, up_off = self._axis_edge(axis_last, self.prev_axis_last, -1.0)
+            if up_on:
                 if self.use_robot and self.robot is not None:
                     self.robot.SetFsmId(4)
-                self.log_once_attr("info", "Switched to FSM ID 4 (Standby)", "_switch_fsm_id_4_logged")
+                self._log_once("info", "Switched to FSM ID 4 (Standby)", "_switch_fsm_id_4_logged")
                 self.robot_stopped = False
                 self.balanced = False
-            if axis_last != -1.0 and self.prev_axis_last == -1.0:
-                self.clear_attr("_switch_fsm_id_4_logged")
+            if up_off:
+                self._clear_once("_switch_fsm_id_4_logged")
 
-            # X -> TOGGLE TO CONTROL THE ARMS
-            if msg.buttons[0] == 1 and self.prev_buttons[0] == 0:
+            if self._btn_rising(msg, 0):
                 self.control_arms = not self.control_arms
-                self.arm_control.set_control_mode(self.control_arms)
                 if self.control_arms:
-                    self.log_once_attr("info", "Enabling arm control mode.", "_enable_arm_control_logged")
+                    self._log_once("info", "Enabling arm control mode.", "_enable_arm_control_logged")
+                    self.publisher_arms_controlled.publish(Bool(data=True))
                 else:
-                    self.log_once_attr("info", "Disabling arm control mode.", "_disable_arm_control_logged")
+                    self._log_once("info", "Disabling arm control mode.", "_disable_arm_control_logged")
+                    self.publisher_arms_controlled.publish(Bool(data=False))
 
-            # 0 -> Move the arm to home position
-            if msg.buttons[1] == 1 and self.prev_buttons[1] == 0:
+            if self._btn_rising(msg, 1):
                 if self.control_arms:
-                    self.log_once_attr("info", "Moving arms to home position.", "_move_arms_home_logged")
-                    self.arm_control.move_arms_to_home()
+                    self._log_once("info", "Moving arms to home position.", "_move_arms_home_logged")
+                    self.publisher_homming_arms.publish(Bool(data=True))
                 else:
-                    self.log_once_attr("warn", "Cannot move arms to home, arm control mode is disabled.", "_warn_move_home_no_control_logged")
+                    self._log_once("warn", "Cannot move arms to home, arm control mode is disabled.", "_warn_move_home_no_control_logged")
 
-            # JUST FOR DEMOS
-            # if msg.buttons[3] == 1 and self.prev_buttons[3] == 0:
-            #     self.robot.ShakeHand()
-            #     self.log_once_attr("info", "Robot is shaking hand.", "_shake_hand_logged")
-            # if msg.buttons[3] == 0 and self.prev_buttons[3] == 1:
-            #     self.robot.ShakeHand()
-            #     self.clear_attr("_shake_hand_logged")
-
-            # if msg.buttons[13] == 1 and self.prev_buttons[13] == 0:
-            #     self.robot.WaveHand()
-            #     self.log_once_attr("info", "Robot is waving hand.", "_wave_hand_logged")
-
-            # L1 -> Emergency stop
-            if msg.buttons[5] == 1 and self.prev_buttons[5] == 0:
-                self.log_once_attr("warn", "Emergency stop button pressed!", "_e_stop_button_pressed_logged")
+            if self._btn_rising(msg, 5):
+                self._log_once("warn", "Emergency stop button pressed!", "_e_stop_button_pressed_logged")
                 self.robot_stopped = True
                 self.balanced = False
-                self.robot.Damp()
+                if self.use_robot and self.robot is not None:
+                    self.robot.Damp()
                 self.control_arms = False
-                self.arm_control.set_control_mode(False)
-            if msg.buttons[5] == 0 and self.prev_buttons[5] == 1:
-                self.clear_attr("_e_stop_button_pressed_logged")
+                self.publisher_arms_controlled.publish(Bool(data=False))
+            if self._btn_falling(msg, 5):
+                self._clear_once("_e_stop_button_pressed_logged")
 
-            # R1 -> Balancing
-            if msg.buttons[6] == 1 and self.prev_buttons[6] == 0:
+            # Gripper controls
+            if msg.axes[4] ==1.0 and self._btn_rising(msg, 3):
+                self._log_once("info", "Open right gripper.", "_open_right_gripper_logged")
+                self.right_gripper_pub.publish(String(data="open"))
+            if msg.axes[4] ==1.0 and self._btn_falling(msg, 3):
+                self._log_once("info", "Close right gripper.", "_close_right_gripper_logged")
+                self.right_gripper_pub.publish(String(data="close"))
+
+            if msg.axes[4] ==-1.0 and self._btn_rising(msg, 3):
+                self._log_once("info", "Open left gripper.", "_open_left_gripper_logged")
+                self.left_gripper_pub.publish(String(data="open"))
+            if msg.axes[4] ==-1.0 and self._btn_falling(msg, 3):
+                self._log_once("info", "Close left gripper.", "_close_left_gripper_logged")
+                self.left_gripper_pub.publish(String(data="close"))
+
+            if self._btn_rising(msg, 6):
                 if not self.balanced:
-                    self.log_once_attr("info", "Starting balancing procedure...", "_start_balance_r1_logged")
+                    self._log_once("info", "Starting balancing procedure...", "_start_balance_r1_logged")
                     self.entering_balancing(max_height=0.5, step=0.02)
-                    self.log_once_attr("info", "Balancing procedure completed.", "_balance_completed_r1_logged")
+                    self._log_once("info", "Balancing procedure completed.", "_balance_completed_r1_logged")
                 else:
-                    self.log_once_attr("info", "Already balanced, no action taken.", "_already_balanced_notice_r1_logged")
-            if msg.buttons[6] == 0 and self.prev_buttons[6] == 1:
-                self.clear_attr("_start_balance_r1_logged")
-                self.clear_attr("_balance_completed_r1_logged")
-                self.clear_attr("_already_balanced_notice_r1_logged")
+                    self._log_once("info", "Already balanced, no action taken.", "_already_balanced_notice_r1_logged")
+            if self._btn_falling(msg, 6):
+                self._clear_once("_start_balance_r1_logged")
+                self._clear_once("_balance_completed_r1_logged")
+                self._clear_once("_already_balanced_notice_r1_logged")
 
-            # R2 (hold) -> Move
             if msg.buttons[8] == 0 and not self.robot_stopped and self.balanced:
                 if self.use_robot and self.robot is not None:
                     self.robot.StopMove()
 
             if msg.buttons[8] == 1 and not self.robot_stopped and self.balanced:
-                vx  = round(msg.axes[1] * 0.5 * -1, 2)
-                vy  = round(msg.axes[0] * 0.5 * -1, 2)
-                yaw = round(msg.axes[2] * 0.5 * -1, 2)
-                self.log_once_attr("info", f"Moving with vx: {vx}, vy: {vy}, yaw: {yaw}", "_moving_logged")
+                vx = round(msg.axes[1] * -0.5, 2)
+                vy = round(msg.axes[0] * -0.5, 2)
+                yaw = round(msg.axes[2] * -0.5, 2)
+                self._log_once("info", f"Moving with vx: {vx}, vy: {vy}, yaw: {yaw}", "_moving_logged")
                 if self.use_robot and self.robot is not None:
                     if abs(vx) < 0.03 and abs(vy) < 0.03 and abs(yaw) < 0.03:
                         self.robot.StopMove()
@@ -243,27 +250,26 @@ class G1LocoClient(Node):
 
         except Exception as e:
             self.get_logger().error(f"Error in joystick_callback: {e}")
-            self.robot.StopMove()
-            self.robot.Damp()
+            if self.use_robot and self.robot is not None:
+                self.robot.StopMove()
+                self.robot.Damp()
             self.robot_stopped = True
             self.balanced = False
 
-    # -------- Balancing --------
     def entering_balancing(self, max_height=0.5, step=0.02):
         if not self.use_robot or self.robot is None:
             self.balanced = True
             self.get_logger().info("Sim balancing done (use_robot:=false).")
             return
-
         height = 0.0
         while height < max_height and not self.robot_stopped:
             height += step
             self.robot.SetStandHeight(height)
             if self.get_fsm_mode() == 0 and height >= 0.2:
-                self.log_once_attr("info", f"Reached max height: {height}", "_balance_reach_height_logged")
+                self._log_once("info", f"Reached max height: {height}", "_balance_reach_height_logged")
                 break
             elif self.get_fsm_mode() != 0:
-                self.log_once_attr("warn", "Problems during balancing, stopping...", "_balance_problem_stop_logged")
+                self._log_once("warn", "Problems during balancing, stopping...", "_balance_problem_stop_logged")
                 break
         self.robot.BalanceStand(1)
         self.robot.SetStandHeight(height)
@@ -271,45 +277,16 @@ class G1LocoClient(Node):
         self.balanced = True
 
 
-
-class UiBridge(QtCore.QObject):
-    runSignal = QtCore.pyqtSignal(object)
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.runSignal.connect(self._run)
-
-    @QtCore.pyqtSlot(object)
-    def _run(self, fn):
-        try:
-            fn()
-        except Exception as e:
-            print(f"[UiBridge] exception in slot: {e}", flush=True)
-
-
 def main(args=None):
-    os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/runtime-root")
-
     rclpy.init(args=args)
-    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-
-    ui_bridge = UiBridge()
-
-    node = G1LocoClient(ui_bridge=ui_bridge)
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
-
-    spin_thread = threading.Thread(target=executor.spin, daemon=True)
-    spin_thread.start()
-
+    node = G1LocoClient()
     try:
-        exit_code = app.exec()
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
-        executor.shutdown()
-        spin_thread.join(timeout=0.5)
         node.destroy_node()
         rclpy.shutdown()
-    return exit_code
-
 
 if __name__ == "__main__":
     main()

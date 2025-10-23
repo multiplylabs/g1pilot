@@ -16,7 +16,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("interface", default_value="eth0"),
-        DeclareLaunchArgument("use_robot", default_value="false"),
+        DeclareLaunchArgument("use_robot", default_value="true"),
         DeclareLaunchArgument("arm_controlled", default_value="both"),
         DeclareLaunchArgument("enable_arm_ui", default_value="true"),
         DeclareLaunchArgument("ik_use_waist", default_value="false"),
@@ -45,6 +45,17 @@ def generate_launch_description():
             package='g1pilot',
             executable='nav2point',
             name='nav2point',
+            parameters=[{
+                'interface': interface,
+                'use_robot': ParameterValue(use_robot, value_type=bool),
+            }],
+            output='screen'
+        ),
+
+        Node(
+            package='g1pilot',
+            executable='arm_controller',
+            name='arm_controller',
             parameters=[{
                 'interface': interface,
                 'use_robot': ParameterValue(use_robot, value_type=bool),
