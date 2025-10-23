@@ -118,11 +118,6 @@ class G1IKSolver:
             #                 self.collision_model.addCollisionPair(pin.CollisionPair(i, j))
             #     print(f"Added {len(self.collision_model.collisionPairs)} collision pairs.", flush=True)
 
-            # # Check which links are included
-            # print("First 10 collision geometries:")
-            # for g in self.collision_model.geometryObjects[:10]:
-            #     print(f"  - {g.name} (attached to joint {self.model.names[g.parentJoint]})", flush=True)
-
 
         except Exception as e:
             raise RuntimeError(f"Failed to load URDF: {e}")
@@ -187,15 +182,16 @@ class G1IKSolver:
         collision_detected = False
 
         for res in self.collision_data.collisionResults:
+            print(res, flush=True)
             if not res.isCollision():
                 continue
 
             d = res.distance
-            if d <= 1e-6 or d > self.collision_distance_thresh:
-                continue
+            if d <= 1e-1 or d > self.collision_distance_thresh:
+                print(f"Skipping collision with distance {d:.4f} m", flush=True)
 
             collision_detected = True
-            print("\n🟠 Collision detected:", flush=True)
+            print("\nCollision detected:", flush=True)
             print(f"  → distance: {d:.4f} m", flush=True)
             print(f"  → normal: {np.array(res.normal)}", flush=True)
             print(f"  → geom A: {self.collision_model.geometryObjects[res.firstGeomIdx].name}", flush=True)
