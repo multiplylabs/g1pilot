@@ -57,17 +57,57 @@ def _quat_wxyz_to_matrix(qwxyz):
 class ArmController(Node):
     """
     ROS 2 node controlling G1 arms with external IK (G1IKSolver) and Unitree DDS.
-    - IK goal low-pass + orientation step limiting
-    - EE auto-calibration (per-side) with static offsets
-    - Velocity clipping and non-arm joint holding
-    - Homing that re-seeds IK goals on completion
+
+    This node manages the high-level control of both G1-29 arms by combining
+    inverse kinematics (Pinocchio-based), filtered goal tracking, end-effector
+    auto-calibration, and direct low-level command publishing via Unitree's DDS
+    LowCmd interface. It also supports simulation mode through /joint_states
+    publishing when `use_robot=False`.
+
+    Parameters
+    ----------
+    use_robot : bool
+        Enables physical robot control (DDS) if True; simulation otherwise.
+    interface : str
+        Ethernet interface for DDS communication.
+    arm_velocity_limit : float
+        Maximum allowed joint velocity.
+    rate_hz : float
+        Main loop update frequency.
+    ik_world_frame : str
+        Reference frame for IK computation.
+    ik_alpha : float
+        Exponential smoothing coefficient for joint updates.
+    ik_goal_filter_alpha : float
+        Low-pass filter coefficient for goal smoothing.
+    ik_orientation_mode : str
+        Orientation mode for IK ('full', 'yaw-only', etc.).
+    ik_max_ori_step_rad : float
+        Maximum allowed orientation step in radians per iteration.
+    ee_auto_calibrate : bool
+        Enables end-effector offset auto-calibration.
+    auto_reissue_goals : bool
+        Automatically reapply last goals after homing.
+    goal_pos_tol : float
+        Tolerance (m) for position convergence check.
+    goal_ori_tol_deg : float
+        Tolerance (deg) for orientation convergence check.
+    ee_offset_right_xyz : list[float]
+        Static XYZ offset for right-hand calibration.
+    ee_offset_right_rpy_deg : list[float]
+        Static RPY offset (deg) for right-hand calibration.
+    ee_offset_left_xyz : list[float]
+        Static XYZ offset for left-hand calibration.
+    ee_offset_left_rpy_deg : list[float]
+        Static RPY offset (deg) for left-hand calibration.
     """
+
+
 
     def __init__(self):
         super().__init__("arm_controller")
         self.get_logger().info("Arm Controller Node started.")
 
-        # ============ Parámetros ============
         self.declare_parameter("use_robot", True)
         self.declare_parameter("interface", "eth0")
         self.declare_parameter("arm_velocity_limit", 2.0)
@@ -75,7 +115,7 @@ class ArmController(Node):
         self.declare_parameter("ik_world_frame", "pelvis")
         self.declare_parameter("ik_alpha", 0.2)
         self.declare_parameter("ik_goal_filter_alpha", 0.25)
-        self.declare_parameter("ik_orientation_mode", "full")  # full|yaw|none
+        self.declare_parameter("ik_orientation_mode", "full")
         self.declare_parameter("ik_max_ori_step_rad", 0.35)
         self.declare_parameter("ee_auto_calibrate", True)
 
@@ -137,7 +177,6 @@ class ArmController(Node):
         if hasattr(self.ik_solver, "set_orientation_mode"):
             self.ik_solver.set_orientation_mode(self.ik_orientation_mode)
 
-        # TF
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -158,11 +197,43 @@ class ArmController(Node):
         self.timer = self.create_timer(1.0 / self.rate_hz, self.main_loop)
 
     def _mk_static_T(self, xyz, rpy_deg):
+        """
+        Create a fixed SE3 transform from XYZ translation and RPY rotation in degrees.
+
+        Parameters
+        ----------
+        xyz : array-like of float
+            Translation vector [x, y, z] in meters.
+        rpy_deg : array-like of float
+            Roll, pitch, yaw angles in degrees.
+
+        Returns
+        -------
+        pinocchio.SE3
+            Homogeneous transform combining translation and rotation.
+        """
+
         rpy = np.radians(np.array(rpy_deg, dtype=float))
         R = pin.rpy.rpyToMatrix(rpy[0], rpy[1], rpy[2])
         return SE3(R, np.array(xyz, dtype=float))
     
     def _goal_error(self, side: str, T_goal: SE3):
+        """
+        Compute position and orientation error between current and target end-effector pose.
+
+        Parameters
+        ----------
+        side : str
+            Arm identifier ('left' or 'right').
+        T_goal : SE3
+            Desired end-effector target pose.
+
+        Returns
+        -------
+        tuple(float, float)
+            (position_error_m, orientation_error_rad)
+        """
+
         M_cur = self._fk_current_ee(side)
         if M_cur is None or T_goal is None:
             return None, None
@@ -175,6 +246,24 @@ class ArmController(Node):
         return dp, ang
 
     def _lowpass_goal(self, T_prev: SE3, T_new: SE3, alpha: float) -> SE3:
+        """
+        Apply exponential smoothing between previous and new SE3 goals.
+
+        Parameters
+        ----------
+        T_prev : SE3
+            Previous goal pose.
+        T_new : SE3
+            New goal pose.
+        alpha : float
+            Low-pass coefficient (0.0–1.0).
+
+        Returns
+        -------
+        SE3
+            Smoothed goal transform.
+        """
+
         if T_prev is None:
             return T_new
         p = (1.0 - alpha) * T_prev.translation + alpha * T_new.translation
@@ -186,6 +275,24 @@ class ArmController(Node):
         return SE3(Rf, p)
 
     def _limit_ori_step(self, R_cur: np.ndarray, R_des: np.ndarray, max_step: float) -> np.ndarray:
+        """
+        Limit the angular step between current and desired rotation matrices.
+
+        Parameters
+        ----------
+        R_cur : np.ndarray
+            Current 3×3 rotation matrix.
+        R_des : np.ndarray
+            Desired 3×3 rotation matrix.
+        max_step : float
+            Maximum angular step (rad).
+
+        Returns
+        -------
+        np.ndarray
+            Limited rotation matrix.
+        """
+
         R_err = R_cur.T @ R_des
         aa = pin.log3(R_err)
         nrm = float(np.linalg.norm(aa))
@@ -195,6 +302,20 @@ class ArmController(Node):
         return R_cur @ pin.exp3(aa_lim)
 
     def _fk_current_ee(self, side: str):
+        """
+        Compute the current end-effector pose (SE3) for the given arm using FK.
+
+        Parameters
+        ----------
+        side : str
+            'left' or 'right'.
+
+        Returns
+        -------
+        SE3 or None
+            Forward kinematics result for the end-effector.
+        """
+
         try:
             q_full = pin.neutral(self.ik_solver.model)
             cur_all = self.get_current_motor_q() if self.use_robot else self._assemble_full_from_last()
@@ -211,6 +332,23 @@ class ArmController(Node):
             return None
 
     def _gate_auto_calibration(self, T_goal_in: SE3, side: str):
+        """
+        Check if the current end-effector pose is close enough to the incoming goal
+        to perform automatic end-effector calibration.
+
+        Parameters
+        ----------
+        T_goal_in : SE3
+            Incoming target pose before any static offset is applied.
+        side : str
+            Arm identifier ('left' or 'right').
+
+        Returns
+        -------
+        SE3 or None
+            Current SE3 pose if within calibration threshold, otherwise None.
+        """
+
         M_cur = self._fk_current_ee(side)
         if M_cur is None:
             return None
@@ -222,7 +360,25 @@ class ArmController(Node):
         return None
 
     def _apply_offsets_and_filters(self, side: str, T_goal_input: SE3):
-        """Aplica offset estático + auto y filtra la meta; limita paso angular."""
+        """
+        Apply static and auto-calibrated offsets to an incoming goal and filter it.
+
+        This function handles end-effector calibration (static + automatic),
+        goal smoothing, and orientation step limitation.
+
+        Parameters
+        ----------
+        side : str
+            Arm identifier ('left' or 'right').
+        T_goal_input : SE3
+            Raw goal transform.
+
+        Returns
+        -------
+        SE3
+            Adjusted and filtered goal for IK solver.
+        """
+
         T_static = self._T_off_right_static if side == 'right' else self._T_off_left_static
         T_auto = self._T_off_right_auto if side == 'right' else self._T_off_left_auto
         auto_done = self._auto_done_right if side == 'right' else self._auto_done_left
@@ -259,6 +415,27 @@ class ArmController(Node):
         return T_use
 
     def _init_robot_interface(self):
+        """
+        Initialize the DDS interface for real robot communication.
+
+        Sets up Unitree DDS subscribers and publishers, initializes communication
+        channels, waits for the first LowState message, and configures motor gains
+        and modes for all arm joints.
+
+        Attributes initialized
+        ----------------------
+        lowstate_subscriber : ChannelSubscriber
+            Subscribes to the `rt/lowstate` DDS topic.
+        lowcmd_publisher : ChannelPublisher
+            Publishes LowCmd messages to the `rt/arm_sdk` DDS topic.
+        subscribe_thread : threading.Thread
+            Thread continuously reading DDS LowState data.
+        msg : unitree_hg_msg_dds__LowCmd_
+            Pre-allocated DDS command message structure.
+        crc : CRC
+            CRC calculator instance used for outgoing messages.
+        """
+
         ChannelFactoryInitialize(0, self.interface)
 
         self.lowstate_subscriber = ChannelSubscriber('rt/lowstate', hg_LowState)
@@ -299,6 +476,18 @@ class ArmController(Node):
         self.tauff_target = np.zeros(14)
 
     def _subscribe_motor_state(self):
+        """
+        Thread loop continuously reading motor state messages from DDS.
+
+        Runs as a daemon thread to asynchronously update internal motor states
+        and store the latest LowState message in `lowstate_buffer`.
+
+        Notes
+        -----
+        - This method blocks indefinitely while ROS 2 is running.
+        - Updates both joint positions and velocities for each motor.
+        """
+
         while rclpy.ok():
             msg = self.lowstate_subscriber.Read()
             if msg is not None:
@@ -308,15 +497,44 @@ class ArmController(Node):
                     self.motor_state[i].dq = msg.motor_state[i].dq
             time.sleep(0.001)
 
-    def get_mode_machine(self):
+    def get_mode_machine(self) -> int:
+        """
+        Get the current robot mode from the latest LowState message.
+
+        Returns
+        -------
+        int
+            Current machine mode identifier, or 0 if no data available.
+        """
+
         msg = self.lowstate_buffer.GetData()
         return getattr(msg, "mode_machine", 0) if msg is not None else 0
 
-    def get_current_motor_q(self):
+    def get_current_motor_q(self) -> np.ndarray:
+        """
+        Retrieve the current joint positions (q) for all robot joints.
+
+        Returns
+        -------
+        np.ndarray
+            Array of joint positions (rad) ordered according to `G1_29_JointIndex`.
+        """
+
         msg = self.lowstate_buffer.GetData()
         return np.array([msg.motor_state[id].q for id in G1_29_JointIndex], dtype=float)
 
-    def _assemble_full_from_last(self):
+    def _assemble_full_from_last(self) -> np.ndarray:
+        """
+        Build a complete 29-DOF joint configuration vector from the latest arm targets.
+
+        Combines left and right 7-DOF joint targets into a full-body vector.
+
+        Returns
+        -------
+        np.ndarray
+            Full 29-element joint configuration array.
+        """
+
         full = np.zeros(29, dtype=float)
         for i, jidx in enumerate(LEFT_JOINT_INDICES_LIST):
             full[jidx] = self._last_q_target[i]
@@ -325,6 +543,18 @@ class ArmController(Node):
         return full
 
     def _hold_non_arm_joints(self):
+        """
+        Maintain non-arm joints in their current positions while arms are disabled.
+
+        For all joints not belonging to the arm, send hold-position commands with
+        appropriate gains depending on their classification (weak or strong).
+
+        Notes
+        -----
+        - Does nothing in simulation mode (`use_robot=False`).
+        - Uses high or low gains depending on whether the joint is weak.
+        """
+
         if not self.use_robot:
             return
         arm_vals  = {m.value for m in G1_29_JointArmIndex}
@@ -347,6 +577,20 @@ class ArmController(Node):
             self.msg.motor_cmd[jid].tau = 0.0
 
     def _arms_controlled_callback(self, msg: Bool):
+        """
+        ROS 2 callback to enable or disable arm control.
+
+        Parameters
+        ----------
+        msg : std_msgs.msg.Bool
+            True to enable arm control, False to disable.
+
+        Behavior
+        --------
+        - On enable: stores current joint state as last target.
+        - On disable: stops sending active motion commands.
+        """
+
         self.arms_enabled = msg.data
         if self.arms_enabled:
             try:
@@ -361,6 +605,20 @@ class ArmController(Node):
             self.get_logger().info("Arm DISABLED")
 
     def _homming_callback(self, msg: Bool):
+        """
+        ROS 2 callback that triggers the homing sequence for both arms.
+
+        Parameters
+        ----------
+        msg : std_msgs.msg.Bool
+            If True, initiates homing to predefined joint targets.
+
+        Notes
+        -----
+        - Clears IK goals before starting the homing motion.
+        - Sets internal flags for homing management.
+        """
+
         if msg.data:
             self.get_logger().info("Moving both arms to HOME position.")
             self.homing_active = True
@@ -370,6 +628,20 @@ class ArmController(Node):
                 self.ik_solver.clear_goals()
 
     def _transform_pose_to_world(self, ps: PoseStamped) -> PoseStamped:
+        """
+        Transform an incoming pose message into the world (IK) reference frame.
+
+        Parameters
+        ----------
+        ps : geometry_msgs.msg.PoseStamped
+            Input pose message with arbitrary frame_id.
+
+        Returns
+        -------
+        geometry_msgs.msg.PoseStamped
+            Pose transformed into `self.frame` if possible; original if TF lookup fails.
+        """
+
         if not ps.header.frame_id or ps.header.frame_id == self.frame:
             return ps
         try:
@@ -380,6 +652,22 @@ class ArmController(Node):
             return ps
 
     def _right_goal_callback(self, msg: PoseStamped):
+        """
+        ROS 2 callback for the right-hand end-effector goal.
+
+        Parameters
+        ----------
+        msg : geometry_msgs.msg.PoseStamped
+            Desired right-hand pose (can be in any TF frame).
+
+        Behavior
+        --------
+        - Applies TF transformation to the world frame.
+        - Handles homing reset alignment if needed.
+        - Applies static and auto-calibration offsets.
+        - Updates the IK solver's right-hand goal.
+        """
+
         if self.homing_active:
             return
 
@@ -414,6 +702,22 @@ class ArmController(Node):
 
 
     def _left_goal_callback(self, msg: PoseStamped):
+        """
+        ROS 2 callback for the left-hand end-effector goal.
+
+        Parameters
+        ----------
+        msg : geometry_msgs.msg.PoseStamped
+            Desired left-hand pose (can be in any TF frame).
+
+        Behavior
+        --------
+        - Applies TF transformation to the world frame.
+        - Handles homing reset alignment if needed.
+        - Applies static and auto-calibration offsets.
+        - Updates the IK solver's left-hand goal.
+        """
+
         if self.homing_active:
             return
 
@@ -447,7 +751,16 @@ class ArmController(Node):
             self.ik_solver.set_goal("left", T_goal_use)
 
 
-    def _compute_dt(self):
+    def _compute_dt(self) -> float:
+        """
+        Compute the elapsed time (Δt) between consecutive main loop cycles.
+
+        Returns
+        -------
+        float
+            Time difference in seconds (clamped to [1e-4, 0.1]).
+        """
+
         now = time.time()
         if self._last_tick_time is None:
             dt = 1.0 / self.rate_hz
@@ -457,7 +770,24 @@ class ArmController(Node):
         return dt
 
     def main_loop(self):
-        # Actualiza buffer desde el robot (si aplica)
+        """
+        Main control loop executed at `rate_hz` frequency.
+
+        Core Responsibilities
+        ---------------------
+        - Update LowState data from DDS.
+        - Hold non-arm joints when arms are disabled.
+        - Execute homing sequence if active.
+        - Update IK solver configuration and compute joint targets.
+        - Apply velocity and smoothing limits.
+        - Publish joint targets via DDS or /joint_states (simulation).
+
+        Notes
+        -----
+        - The loop manages both autonomous IK motion and homing control.
+        - It automatically synchronizes the IK goals when returning to home.
+        """
+
         if self.use_robot:
             robot_data = self.lowstate_subscriber.Read()
             if robot_data is not None:
@@ -466,16 +796,14 @@ class ArmController(Node):
                     self.motor_state[i].q  = robot_data.motor_state[i].q
                     self.motor_state[i].dq = robot_data.motor_state[i].dq
 
-        # Si brazos deshabilitados → mantener no-brazos y salir
         if not self.arms_enabled:
             self._hold_non_arm_joints()
             return
 
-        # ===================== Generación de q_target =====================
         if self.homing_active:
             q_target = np.concatenate((self.home_left, self.home_right))
             if np.linalg.norm(q_target - self._last_q_target) < self.homing_tolerance:
-                # HOME alcanzado
+
                 self.homing_active = False
                 self.homing_reached = True
                 self._last_q_target = q_target.copy()
@@ -501,14 +829,12 @@ class ArmController(Node):
                     T_left  = self.ik_solver.data.oMf[self.ik_solver._fid_left]
                     T_right = self.ik_solver.data.oMf[self.ik_solver._fid_right]
 
-                    # Filtros y metas alineadas a HOME
                     self._goal_left_filt  = T_left.copy()
                     self._goal_right_filt = T_right.copy()
                     if hasattr(self.ik_solver, "set_goal"):
                         self.ik_solver.set_goal("left",  T_left.copy())
                         self.ik_solver.set_goal("right", T_right.copy())
 
-                    # Marca que el próximo goal debe resetear historia
                     self._reset_after_home = True
 
                     self.get_logger().info("IK solver goals aligned with home pose.")
@@ -521,10 +847,8 @@ class ArmController(Node):
             q_target = np.concatenate((self.home_left, self.home_right))
 
         else:
-            # Estado actual 29D (real o último target en sim)
             current_all = self.get_current_motor_q() if self.use_robot else self._assemble_full_from_last()
 
-            # Mantén semilla del IK con la postura actual para mejorar convergencia
             try:
                 self.ik_solver.set_current_configuration({
                     "left":  self._last_q_target[0:7].copy(),
@@ -533,13 +857,11 @@ class ArmController(Node):
             except Exception:
                 pass
 
-            # ---------- Reinyecta SIEMPRE las metas latcheadas ----------
             if self._goal_left_filt is not None:
                 self.ik_solver.set_goal("left", self._goal_left_filt)
             if self._goal_right_filt is not None:
                 self.ik_solver.set_goal("right", self._goal_right_filt)
 
-            # Pide targets al IK externo
             q_dict = self.ik_solver.get_joint_targets(current_all)
             q_target = np.zeros(14, dtype=float)
             if "left" in q_dict:
@@ -547,7 +869,6 @@ class ArmController(Node):
             if "right" in q_dict:
                 q_target[7:14] = q_dict["right"]
 
-        # ===================== Suavizado y limitador de velocidad =====================
         dt = self._compute_dt()
         max_step = self.arm_velocity_limit * dt
         dq = np.clip(q_target - self._last_q_target, -max_step, max_step)
@@ -556,12 +877,10 @@ class ArmController(Node):
         q_smooth = (1.0 - self.ik_alpha) * self._last_q_target + self.ik_alpha * q_unsmoothed
         self._last_q_target = q_smooth.copy()
 
-        # ===================== Publicación =====================
         if self.use_robot:
             self.msg.mode_machine = self.get_mode_machine()
             self.msg.mode_pr = 1
 
-            # Dummy (si el firmware lo requiere)
             try:
                 self.msg.motor_cmd[G1_29_JointIndex.kNotUsedJoint0].q = 1.0
             except Exception:
@@ -572,7 +891,7 @@ class ArmController(Node):
                 self.msg.motor_cmd[jid].mode = 1
                 self.msg.motor_cmd[jid].q   = float(q_smooth[idx])
                 self.msg.motor_cmd[jid].dq  = 0.0
-                self.msg.motor_cmd[jid].tau = float(0.0)  # feedforward si quieres: self.tauff_target[idx]
+                self.msg.motor_cmd[jid].tau = float(0.0)
                 if jid.value in wrist_vals:
                     self.msg.motor_cmd[jid].kp = self.kp_wrist
                     self.msg.motor_cmd[jid].kd = self.kd_wrist

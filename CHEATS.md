@@ -7,7 +7,7 @@ ros2 topic pub --once /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_
 
 ### PUBLISH POINT
 ```bash
-ros2 topic pub -1 /g1pilot/left_hand_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'pelvis'}, pose: {position: {x: 0.20, y: 0.20, z: 0.20}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
+ros2 topic pub -1 /g1pilot/left_hand_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'pelvis'}, pose: {position: {x: 0.40, y: 0.17, z: 0.09}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
 ```
 
 ### PUBLISH JOY
