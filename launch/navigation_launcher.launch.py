@@ -16,7 +16,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("interface", default_value="eth0"),
-        DeclareLaunchArgument("use_robot", default_value="false"),
+        DeclareLaunchArgument("use_robot", default_value="true"),
         DeclareLaunchArgument("arm_controlled", default_value="both"),
         DeclareLaunchArgument("enable_arm_ui", default_value="true"),
         DeclareLaunchArgument("ik_use_waist", default_value="false"),

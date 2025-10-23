@@ -5,6 +5,11 @@
 ros2 topic pub --once /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_id: 'map'}, point: {x: 1.0, y: 0.0, z: 0.0}}"
 ```
 
+### PUBLISH POINT
+```bash
+ros2 topic pub -1 /g1pilot/left_hand_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'pelvis'}, pose: {position: {x: 0.20, y: 0.20, z: 0.20}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
+```
+
 ### PUBLISH JOY
 ```bash
 ros2 topic pub --once /g1pilot/joy sensor_msgs/msg/Joy '{header: {stamp: {sec: 0, nanosec: 0}, frame_id: ""}, axes: [0,0,0,0,0,0,0,0], buttons: [1,0,0,0,0,0,0,0,0,0,0,0]}'

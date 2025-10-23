@@ -351,8 +351,12 @@ Visualization Manager:
           Value: false
         imu_in_torso:
           Value: false
+        left_ankle_pitch_link:
+          Value: true
         left_ankle_roll_link:
           Value: false
+        left_elbow_link:
+          Value: true
         left_foot_line_contact_lower:
           Value: false
         left_foot_line_contact_upper:
@@ -369,8 +373,26 @@ Visualization Manager:
           Value: false
         left_hand_point_contact:
           Value: false
+        left_hip_pitch_link:
+          Value: true
+        left_hip_roll_link:
+          Value: true
+        left_hip_yaw_link:
+          Value: true
+        left_knee_link:
+          Value: true
         left_rubber_hand:
           Value: false
+        left_shoulder_pitch_link:
+          Value: true
+        left_shoulder_roll_link:
+          Value: true
+        left_shoulder_yaw_link:
+          Value: true
+        left_wrist_pitch_link:
+          Value: true
+        left_wrist_roll_link:
+          Value: true
         left_wrist_yaw_link:
           Value: false
         livox_frame:
@@ -387,8 +409,12 @@ Visualization Manager:
           Value: false
         pelvis_contour_link:
           Value: false
+        right_ankle_pitch_link:
+          Value: true
         right_ankle_roll_link:
           Value: false
+        right_elbow_link:
+          Value: true
         right_foot_line_contact_lower:
           Value: false
         right_foot_line_contact_upper:
@@ -405,13 +431,33 @@ Visualization Manager:
           Value: false
         right_hand_point_contact:
           Value: true
+        right_hip_pitch_link:
+          Value: true
+        right_hip_roll_link:
+          Value: true
+        right_hip_yaw_link:
+          Value: true
+        right_knee_link:
+          Value: true
         right_rubber_hand:
           Value: false
+        right_shoulder_pitch_link:
+          Value: true
+        right_shoulder_roll_link:
+          Value: true
+        right_shoulder_yaw_link:
+          Value: true
+        right_wrist_pitch_link:
+          Value: true
+        right_wrist_roll_link:
+          Value: true
         right_wrist_yaw_link:
           Value: false
         torso_link:
           Value: false
         waist_roll_link:
+          Value: true
+        waist_yaw_link:
           Value: true
         world:
           Value: true
@@ -425,8 +471,85 @@ Visualization Manager:
           pelvis:
             imu_in_pelvis:
               {}
+            left_hip_pitch_link:
+              left_hip_roll_link:
+                left_hip_yaw_link:
+                  left_knee_link:
+                    left_ankle_pitch_link:
+                      left_ankle_roll_link:
+                        left_foot_line_contact_lower:
+                          {}
+                        left_foot_line_contact_upper:
+                          {}
+                        left_foot_lower_left:
+                          {}
+                        left_foot_lower_right:
+                          {}
+                        left_foot_point_contact:
+                          {}
+                        left_foot_upper_left:
+                          {}
+                        left_foot_upper_right:
+                          {}
             pelvis_contour_link:
               {}
+            right_hip_pitch_link:
+              right_hip_roll_link:
+                right_hip_yaw_link:
+                  right_knee_link:
+                    right_ankle_pitch_link:
+                      right_ankle_roll_link:
+                        right_foot_line_contact_lower:
+                          {}
+                        right_foot_line_contact_upper:
+                          {}
+                        right_foot_lower_left:
+                          {}
+                        right_foot_lower_right:
+                          {}
+                        right_foot_point_contact:
+                          {}
+                        right_foot_upper_left:
+                          {}
+                        right_foot_upper_right:
+                          {}
+            waist_yaw_link:
+              waist_roll_link:
+                mrbeam_link:
+                  {}
+                torso_link:
+                  d435_link:
+                    camera_link:
+                      {}
+                  head_link:
+                    {}
+                  imu_in_torso:
+                    {}
+                  left_shoulder_pitch_link:
+                    left_shoulder_roll_link:
+                      left_shoulder_yaw_link:
+                        left_elbow_link:
+                          left_wrist_roll_link:
+                            left_wrist_pitch_link:
+                              left_wrist_yaw_link:
+                                left_rubber_hand:
+                                  left_hand_point_contact:
+                                    {}
+                  logo_link:
+                    {}
+                  mid360_link:
+                    livox_frame:
+                      {}
+                  right_shoulder_pitch_link:
+                    right_shoulder_roll_link:
+                      right_shoulder_yaw_link:
+                        right_elbow_link:
+                          right_wrist_roll_link:
+                            right_wrist_pitch_link:
+                              right_wrist_yaw_link:
+                                right_rubber_hand:
+                                  right_hand_point_contact:
+                                    {}
       Update Interval: 0
       Value: true
     - Class: rviz_common/Group
@@ -753,25 +876,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.226854085922241
+      Distance: 3.4103589057922363
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.5554175972938538
-        Y: -1.0074957609176636
-        Z: -0.6549715995788574
+        X: -0.5650805234909058
+        Y: -0.4996221661567688
+        Z: -0.5306301116943359
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.549796462059021
+      Pitch: 0.5147964954376221
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.3704378604888916
+      Yaw: 0.7254390716552734
     Saved: ~
 Window Geometry:
   Displays:

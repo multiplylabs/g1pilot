@@ -8,8 +8,8 @@ from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, Cha
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
 
-CLOSE_RIGHT_VALUES = [-0.05, -0.99, -1.68, 1.56, 1.70, 1.56, 1.70]
-CLOSE_LEFT_VALUES  = [-0.02,  0.47,  1.89, -1.44, -1.89, -1.52, -1.92]
+CLOSE_RIGHT_VALUES = [0.0637, 0.670, -1.381, 0.551, 1.094, 0.671, 0.948]
+CLOSE_LEFT_VALUES  = [0.019,  -0.364,  1.549, -0.909, -1.155, -0.988, -0.069]
 OPEN_VALUES        = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 class DX3Controller(Node):
@@ -25,6 +25,7 @@ class DX3Controller(Node):
         self.right_target = OPEN_VALUES
         self.left_target = OPEN_VALUES
         self.total_motors = 7
+        self.send_commands = True
 
         ChannelFactoryInitialize(0, interface)
 
@@ -76,6 +77,8 @@ class DX3Controller(Node):
         return cmd
 
     def publish_commands(self):
+        if not self.send_commands:
+            return
         if hasattr(self, "right_pub") and self.right_action is not None:
             self.right_pub.Write(self.create_cmd(self.right_target))
         if hasattr(self, "left_pub") and self.left_action is not None:
