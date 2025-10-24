@@ -3,9 +3,9 @@
 
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QGridLayout, QPushButton, QLabel, QVBoxLayout
+    QApplication, QWidget, QGridLayout, QPushButton, QVBoxLayout
 )
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import QTimer
 
 import rclpy
 from rclpy.node import Node
@@ -35,7 +35,9 @@ class StreamDeck(Node):
         msg.data = text
         pub.publish(msg)
 
+
 class ButtonGUI(QWidget):
+    """PyQt6 GUI for ROS2 StreamDeck with timed and emergency behaviors."""
 
     def __init__(self, ros_node):
         super().__init__()
@@ -49,28 +51,27 @@ class ButtonGUI(QWidget):
         self.setWindowTitle("DIGITAL STREAMDECK")
         self.init_ui()
         self.apply_style()
-        
 
     def init_ui(self):
         main_layout = QVBoxLayout()
-
         grid = QGridLayout()
         grid.setSpacing(10)
         rows, cols = 5, 5
         self.buttons = {}
 
         button_actions = {
-            (0, 0): ("START", lambda: self.toggle_button((0, 0), self.node.pub_start)),
-            (0, 1): ("START\nBALANCING", lambda: self.toggle_button((0, 1), self.node.pub_start_balancing)),
+            (0, 0): ("START", lambda: self.flash_button((0, 0), self.node.pub_start)),
+            (0, 1): ("START\nBALANCING", lambda: self.flash_button((0, 1), self.node.pub_start_balancing)),
+            (1, 1): ("HOMING\nARMS", lambda: self.flash_button((1, 1), self.node.pub_arms_home)),
+
             (1, 0): ("ENABLE\nMANIPULATION", lambda: self.toggle_button((1, 0), self.node.pub_arms_enabled)),
-            (1, 1): ("HOMING\nARMS", lambda: self.toggle_button((1, 1), self.node.pub_arms_home)),
 
             (2, 0): ("OPEN\nLEFT\nHAND", lambda: self.toggle_hand("left", "open", self.node.pub_left_hand)),
             (2, 1): ("CLOSE\nLEFT\nHAND", lambda: self.toggle_hand("left", "close", self.node.pub_left_hand)),
             (2, 2): ("OPEN\nRIGHT\nHAND", lambda: self.toggle_hand("right", "open", self.node.pub_right_hand)),
             (2, 3): ("CLOSE\nRIGHT\nHAND", lambda: self.toggle_hand("right", "close", self.node.pub_right_hand)),
 
-            (4, 4): ("EMERGENCY\nSTOP", lambda: self.emergency_stop()),
+            (4, 4): ("EMERGENCY\nSTOP", self.emergency_stop),
         }
 
         for r in range(rows):
@@ -155,15 +156,26 @@ class ButtonGUI(QWidget):
                     border: 1px solid #80ff80;
                     border-radius: 10px;
                 }
-                QPushButton:hover {
-                    background-color: #5fdc5f;
-                }
             """)
         else:
             btn.setStyleSheet("")
             self.apply_style()
 
         self.button_states[pos] = active
+
+    def flash_button(self, pos, pub, duration=1000):
+        """Temporarily activates button for <duration> ms then resets."""
+        self.set_button_active(pos, True)
+        self.node.publish_bool(pub, True)
+
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self.deactivate_button(pos, pub))
+        timer.start(duration)
+
+    def deactivate_button(self, pos, pub):
+        self.set_button_active(pos, False)
+        self.node.publish_bool(pub, False)
 
     def toggle_button(self, pos, pub):
         new_state = not self.button_states[pos]
@@ -177,11 +189,21 @@ class ButtonGUI(QWidget):
 
         self.set_button_active(this_pos, True)
         self.set_button_active(other_pos, False)
-
         self.node.publish_str(pub, action)
 
     def emergency_stop(self):
+        """Turns all buttons OFF and publishes False to all Bool topics."""
+
+        self.node.publish_bool(self.node.pub_start, False)
+        self.node.publish_bool(self.node.pub_start_balancing, False)
+        self.node.publish_bool(self.node.pub_arms_enabled, False)
+        self.node.publish_bool(self.node.pub_arms_home, False)
         self.node.publish_bool(self.node.pub_emergency_stop, True)
+
+        for pos in self.buttons:
+            if pos != (4, 4):
+                self.set_button_active(pos, False)
+
         btn = self.buttons[(4, 4)]
         btn.setStyleSheet("""
             QPushButton {
