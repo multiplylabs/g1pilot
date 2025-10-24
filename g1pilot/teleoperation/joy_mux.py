@@ -16,7 +16,7 @@ def clamp(v,a,b):
 
 class JoyMux(Node):
     def __init__(self):
-        super().__init__('pure_pursuit_joy_mux')
+        super().__init__('joy_mux')
         self.declare_parameter('path_topic','/g1pilot/path')
         self.declare_parameter('odom_topic','/lidar_odometry/pose_fixed')
         self.declare_parameter('manual_topic','/g1pilot/joy_manual')

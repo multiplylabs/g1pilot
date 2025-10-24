@@ -6,6 +6,8 @@ https://opensource.org/licenses/BSD-3-Clause)
 https://docs.ros.org/en/humble/index.html)
 [![GitHub Stars](https://img.shields.io/github/stars/Hucebot/g1pilot?style=social)](https://github.com/Hucebot/g1pilot/stargazers)
 
+<img src="https://github.com/hucebot/g1pilot/blob/main/images/g1pilot.png" alt="G1Pilot" width="800" height="500">
+
 G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basically is made to leave the robot lower body to the controller of unitree while providing all necessary tools to control the upper body and teleoperate the robot. It exposes two complementary control Joint (low‑level, per‑joint) and Cartesian (end‑effector) and continuously publishes core robot state for monitoring and visualization in RViz.
 
 ## Highlights
@@ -27,6 +29,9 @@ G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basic
 ## G1Pilot Flow
 
 <img src="https://github.com/hucebot/g1pilot/blob/main/images/g1pilot_flow.jpg" alt="G1Pilot Flow" width="800">
+
+## G1Pilot Features
+
 
 | **Joint Controller** | **Cartesian Controller** |
 |---------------------|--------------------|
