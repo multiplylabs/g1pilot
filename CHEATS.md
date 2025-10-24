@@ -38,12 +38,12 @@ ros2 topic pub --once /g1pilot/joy sensor_msgs/msg/Joy '{header: {stamp: {sec: 0
 
 ### ENABLE MANIPULATION (way: 2)
 ```bash
-ros2 topic pub --once /g1pilot/arms_controlled std_msgs/msg/Bool "{data: true}"
+ros2 topic pub --once /g1pilot/arms/enabled std_msgs/msg/Bool "{data: true}"
 ```
 
 ### HOMMING ARMS
 ```bash
-ros2 topic pub --once /g1pilot/homming_arms std_msgs/msg/Bool "{data: true}"
+ros2 topic pub --once /g1pilot/arms/home std_msgs/msg/Bool "{data: true}"
 ```
 
 ### PUBLISH POINT

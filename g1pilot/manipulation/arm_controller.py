@@ -219,7 +219,7 @@ class ArmController(Node):
             self.joint_pub = self.create_publisher(JointState, "/joint_states", 10)
         self.create_subscription(PoseStamped, "/g1pilot/hand_goal/right", self._right_goal_callback, 10)
         self.create_subscription(PoseStamped, "/g1pilot/hand_goal/left", self._left_goal_callback, 10)
-        self.create_subscription(Bool, "/g1pilot/arms_controlled", self._arms_controlled_callback, 10)
+        self.create_subscription(Bool, "/g1pilot/manipulation/enabled", self._arms_controlled_callback, 10)
         self.create_subscription(Bool, "/g1pilot/homming_arms", self._homming_callback, 10)
 
         if self.use_robot:

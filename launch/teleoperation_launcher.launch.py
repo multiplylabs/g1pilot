@@ -20,4 +20,11 @@ def generate_launch_description():
             output='screen'
         ),
 
+        Node(
+            package='g1pilot',
+            executable='ui_interface',
+            name='ui_interface',
+            output='screen'
+        ),
+
     ])

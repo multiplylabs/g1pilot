@@ -44,7 +44,18 @@ WORKDIR /ros2_ws
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --cmake-args -DROS_EDITION=ROS2 -DHUMBLE_ROS=humble
 
-RUN pip install pyqt5 pin meshcat evdev
+RUN pip install pyqt6 pin meshcat evdev
+RUN apt-get update && apt-get install -y \
+    libxkbcommon-x11-0 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-render-util0 \
+    libxcb-xinerama0 \
+    libxcb-xinput0 \
+    libxcb-shape0
+
 
 RUN apt update
 RUN apt install ros-${ROS_DISTRO}-rosidl-default-generators -y
