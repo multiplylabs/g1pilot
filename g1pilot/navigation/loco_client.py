@@ -6,10 +6,8 @@ import json
 import threading
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import Bool, String
 from sensor_msgs.msg import Joy
-from PyQt5 import QtWidgets, QtCore
 
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
