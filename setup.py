@@ -74,7 +74,7 @@ setup(
             # Navigation Nodes
             'loco_client = g1pilot.navigation.loco_client:main',
             'dijkstra_planner = g1pilot.navigation.dijkstra_planner:main',
-            'nav2point = g1pilot.navigation.navigate_to_point:main',
+            'nav2point = g1pilot.navigation.nav2point:main',
             'create_map = g1pilot.navigation.create_map:main',
             'mola_fixed = g1pilot.navigation.fix_mola_odometry:main',
         ],

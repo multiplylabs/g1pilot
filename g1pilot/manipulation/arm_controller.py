@@ -138,7 +138,7 @@ class ArmController(Node):
 
         self.declare_parameter("use_robot", True)
         self.declare_parameter("interface", "eth0")
-        self.declare_parameter("arm_velocity_limit", 8.0)
+        self.declare_parameter("arm_velocity_limit", 5.0)
         self.declare_parameter("rate_hz", 250.0)
         self.declare_parameter("ik_world_frame", "pelvis")
         self.declare_parameter("ik_alpha", 0.2)
@@ -219,8 +219,8 @@ class ArmController(Node):
             self.joint_pub = self.create_publisher(JointState, "/joint_states", 10)
         self.create_subscription(PoseStamped, "/g1pilot/hand_goal/right", self._right_goal_callback, 10)
         self.create_subscription(PoseStamped, "/g1pilot/hand_goal/left", self._left_goal_callback, 10)
-        self.create_subscription(Bool, "/g1pilot/manipulation/enabled", self._arms_controlled_callback, 10)
-        self.create_subscription(Bool, "/g1pilot/homming_arms", self._homming_callback, 10)
+        self.create_subscription(Bool, "/g1pilot/arms/enabled", self._arms_controlled_callback, 10)
+        self.create_subscription(Bool, "/g1pilot/arms/home", self._homming_callback, 10)
 
         if self.use_robot:
             self._init_robot_interface()
@@ -703,6 +703,9 @@ class ArmController(Node):
 
         if self.homing_active:
             return
+        
+        if not self.arms_enabled:
+            return
 
         if self._reset_after_home:
             self._reset_after_home = False
@@ -752,6 +755,9 @@ class ArmController(Node):
         """
 
         if self.homing_active:
+            return
+        
+        if not self.arms_enabled:
             return
 
         if self._reset_after_home:

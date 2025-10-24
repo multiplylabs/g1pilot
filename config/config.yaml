@@ -21,7 +21,7 @@ nodes:
 inverse_kinematics:
   alpha: 0.2
   max_dq_step: 0.05
-  velocity_limit: 2.0
+  velocity_limit: 5.0
   kp_high: 300
   kd_high: 3.0
   kp_low: 150
