@@ -7,7 +7,7 @@ ros2 topic pub --once /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_
 
 ### PUBLISH POINT
 ```bash
-ros2 topic pub -1 /g1pilot/left_hand_goal geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'pelvis'}, pose: {position: {x: 0.40, y: 0.17, z: 0.09}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
+ros2 topic pub -1 /g1pilot/hand_goal/left geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'pelvis'}, pose: {position: {x: 0.40, y: 0.17, z: 0.09}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
 ```
 
 ### PUBLISH JOY
@@ -17,10 +17,10 @@ ros2 topic pub --once /g1pilot/joy sensor_msgs/msg/Joy '{header: {stamp: {sec: 0
 
 ### CONTROL DX3 HAND (for left and right hand)
 ```bash
-ros2 topic pub --once /g1pilot/dx3/right/hand_action std_msgs/msg/String "{data: 'close'}"
+ros2 topic pub --once /g1pilot/dx3/hand_action/right std_msgs/msg/String "{data: 'close'}"
 ```
 ```bash
-ros2 topic pub --once /g1pilot/dx3/left/hand_action std_msgs/msg/String "{data: 'open'}"
+ros2 topic pub --once /g1pilot/dx3/hand_action/right std_msgs/msg/String "{data: 'open'}"
 ```
 
 ### STANDARD SEQUENCE FOR UNITREE ROBOT

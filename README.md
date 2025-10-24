@@ -24,9 +24,9 @@ G1Pilot is an open‑source ROS 2 package for Unitree G1 humanoid robots. Basic
 
 - Navigation stack integrated: MOLA odometry and path planner for autonomous navigation.
 
-## Visual Overview
+## G1Pilot Flow
 
-<img src="https://github.com/hucebot/g1pilot/blob/main/images/g1pilot_flow.jpg" alt="G1Pilot FLow" width="800">
+<img src="https://github.com/hucebot/g1pilot/blob/main/images/g1pilot_flow.jpg" alt="G1Pilot Flow" width="800">
 
 | **Joint Controller** | **Cartesian Controller** |
 |---------------------|--------------------|
