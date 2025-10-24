@@ -75,6 +75,7 @@ class G1LocoClient(Node):
             self.get_logger().info("use_robot:=false -> Not connecting to robot.")
 
         self.create_subscription(Bool, '/g1pilot/emergency_stop', self.emergency_callback, 10)
+        self.create_subscription(Bool, '/g1pilot/start,balancing', self.start_callback, 10)
         self.create_subscription(Bool, '/g1pilot/start_balancing', self.start_balancing_callback, 10)
         self.create_subscription(Joy, '/g1pilot/joy', self.joystick_callback, 10)
 
@@ -138,6 +139,13 @@ class G1LocoClient(Node):
                 self.publisher_arms_controlled.publish(Bool(data=False))
         else:
             self._clear_once("_e_stop_activated_logged")
+
+    def start_callback(self, msg: Bool):
+        if self.use_robot and self.robot is not None and msg.data:
+            self.robot.SetFsmId(4)
+            self._log_once("info", "Switched to FSM ID 4 (Standby)", "_switch_fsm_id_4_logged")
+            self.robot_stopped = False
+            self.balanced = False
 
     def start_balancing_callback(self, msg: Bool):
         if msg.data and not self.balanced:

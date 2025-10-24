@@ -1,5 +1,20 @@
 ## CHEATS:
 
+### START
+```bash
+ros2 topic pub --once /g1pilot/start std_msgs/msg/Bool "{data: true}"
+```
+
+### EMERGENCY STOP
+```bash
+ros2 topic pub --once /g1pilot/emergency_stop std_msgs/msg/Bool "{data: true}"
+```
+
+### START BALANCING
+```bash
+ros2 topic pub --once /g1pilot/start_balance std_msgs/msg/Bool "{data: true}"
+```
+
 ###  PUBLISH GOAL
 ```bash
 ros2 topic pub --once /g1pilot/goal geometry_msgs/PointStamped "{header: {frame_id: 'map'}, point: {x: 1.0, y: 0.0, z: 0.0}}"
