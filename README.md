@@ -87,7 +87,7 @@ To run the docker image in the robot with the following command:
 - **create_map**: Dummy node to create a 2D occupancy grid map from the robot's sensors, used for navigation and obstacle avoidance. 
 - **mola_fixed**: Node to interface with the MOLA odometry system, transform the odometry data into g1 frame.
 - **arm_controller**: Node to control the upper body of the robot, providing joint and cartesian control modes for the arms.
-
+- **ui_interface**: Node to provide a user interface to control the main functionalities of the robot.
 ## Usage
 
 ### Configuration File
