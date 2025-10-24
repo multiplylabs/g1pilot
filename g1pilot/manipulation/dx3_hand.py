@@ -68,8 +68,8 @@ class DX3Controller(Node):
         positions = []
         for i in range(len(msg.motor_state)):
             motor_state = MotorState()
-            motor_state.id = msg.motor_state[i].id
-            motor_state.temperature = float(msg.motor_state[i].temperature)
+            motor_state.name = f"left_motor_{i}"
+            motor_state.temperature = float(msg.motor_state[i].temperature[0])
             motor_state.voltage = float(msg.motor_state[i].vol)
             motor_state.position = float(msg.motor_state[i].q)
             motor_state.velocity = float(msg.motor_state[i].dq)
@@ -86,8 +86,8 @@ class DX3Controller(Node):
         positions = []
         for i in range(len(msg.motor_state)):
             motor_state = MotorState()
-            motor_state.id = msg.motor_state[i].id
-            motor_state.temperature = float(msg.motor_state[i].temperature)
+            motor_state.name = f"right_motor_{i}"
+            motor_state.temperature = float(msg.motor_state[i].temperature[0])
             motor_state.voltage = float(msg.motor_state[i].vol)
             motor_state.position = float(msg.motor_state[i].q)
             motor_state.velocity = float(msg.motor_state[i].dq)
