@@ -16,7 +16,7 @@ def yaw_from_quat(x, y, z, w):
 
 class Nav2Point(Node):
     def __init__(self):
-        super().__init__('path_follower_joy_sim')
+        super().__init__('nav2point')
         self.declare_parameter('publish_rate', 50.0)
         self.declare_parameter('pos_kp', 0.8)
         self.declare_parameter('yaw_kp', 1.5)

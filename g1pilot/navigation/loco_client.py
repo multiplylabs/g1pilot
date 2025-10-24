@@ -74,8 +74,8 @@ class G1LocoClient(Node):
             self.current_mode = 0
             self.get_logger().info("use_robot:=false -> Not connecting to robot.")
 
-        self.create_subscription(Bool, 'emergency_stop', self.emergency_callback, 10)
-        self.create_subscription(Bool, 'start_balancing', self.start_balancing_callback, 10)
+        self.create_subscription(Bool, '/g1pilot/emergency_stop', self.emergency_callback, 10)
+        self.create_subscription(Bool, '/g1pilot/start_balancing', self.start_balancing_callback, 10)
         self.create_subscription(Joy, '/g1pilot/joy', self.joystick_callback, 10)
 
         self.publisher_arms_controlled = self.create_publisher(Bool, '/g1pilot/arms_controlled', 1)

@@ -2,14 +2,16 @@
 # -*- coding: utf-8 -*-
 
 import rclpy
+from rclpy.qos import QoSProfile
 from rclpy.node import Node
 from std_msgs.msg import String
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
+from astroviz_interfaces.msg import MotorState, MotorStateList
 
-CLOSE_RIGHT_VALUES = [0.0637, 0.670, -1.381, 0.551, 1.094, 0.671, 0.948]
-CLOSE_LEFT_VALUES  = [0.019,  -0.364,  1.549, -0.909, -1.155, -0.988, -0.069]
+CLOSE_RIGHT_VALUES = [-0.10, 0.63, -1.74, 1.06, 0.95, 0.91, 1.22]
+CLOSE_LEFT_VALUES  = [0.04,  -0.04,  1.51, -1.10, -1.47, -1.13, -1.23]
 OPEN_VALUES        = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 class DX3Controller(Node):
@@ -19,6 +21,8 @@ class DX3Controller(Node):
         self.declare_parameter("arm_controlled", "both")
         interface = self.get_parameter("interface").get_parameter_value().string_value
         arm_controlled = self.get_parameter("arm_controlled").get_parameter_value().string_value
+        self.left_gripper_state_publisher = self.create_publisher(MotorStateList, 'g1pilot/dx3/left/motor_state', QoSProfile(depth=10))
+        self.right_gripper_state_publisher = self.create_publisher(MotorStateList, 'g1pilot/dx3/right/motor_state', QoSProfile(depth=10))
 
         self.right_action = None
         self.left_action = None
@@ -60,10 +64,40 @@ class DX3Controller(Node):
             self.left_target = CLOSE_LEFT_VALUES if msg.data == "close" else OPEN_VALUES
 
     def left_callback(self, msg: HandState_):
-        self.get_logger().debug(f'Left hand state received: {msg}')
+        motor_list_msg = MotorStateList()
+        positions = []
+        for i in range(len(msg.motor_state)):
+            motor_state = MotorState()
+            motor_state.id = msg.motor_state[i].id
+            motor_state.temperature = float(msg.motor_state[i].temperature)
+            motor_state.voltage = float(msg.motor_state[i].vol)
+            motor_state.position = float(msg.motor_state[i].q)
+            motor_state.velocity = float(msg.motor_state[i].dq)
+            motor_list_msg.motor_list.append(motor_state)
+            positions.append(motor_state.position)
+        self.left_gripper_state_publisher.publish(motor_list_msg)
+
+        if  self.send_commands:
+            return
+        self.get_logger().debug(f'Left hand positions: {positions}')
 
     def right_callback(self, msg: HandState_):
-        self.get_logger().debug(f'Right hand state received: {msg}')
+        motor_list_msg = MotorStateList()
+        positions = []
+        for i in range(len(msg.motor_state)):
+            motor_state = MotorState()
+            motor_state.id = msg.motor_state[i].id
+            motor_state.temperature = float(msg.motor_state[i].temperature)
+            motor_state.voltage = float(msg.motor_state[i].vol)
+            motor_state.position = float(msg.motor_state[i].q)
+            motor_state.velocity = float(msg.motor_state[i].dq)
+            motor_list_msg.motor_list.append(motor_state)
+            positions.append(motor_state.position)
+        self.right_gripper_state_publisher.publish(motor_list_msg)
+
+        if  self.send_commands:
+            return
+        self.get_logger().debug(f'Right hand positions: {positions}')
 
     def create_cmd(self, values):
         cmd = unitree_hg_msg_dds__HandCmd_()

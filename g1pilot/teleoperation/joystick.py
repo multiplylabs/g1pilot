@@ -6,9 +6,9 @@ from std_msgs.msg import Bool
 import evdev
 import threading
 
-class DirectJoyPublisher(Node):
+class ManualJoystick(Node):
     def __init__(self):
-        super().__init__('direct_joy_publisher')
+        super().__init__('manual_joystick')
 
         self.publisher = self.create_publisher(Joy, '/g1pilot/joy_manual', 10)
         self.auto_pub  = self.create_publisher(Bool, '/g1pilot/auto_enable', 10)
@@ -89,7 +89,7 @@ class DirectJoyPublisher(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DirectJoyPublisher()
+    node = ManualJoystick()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

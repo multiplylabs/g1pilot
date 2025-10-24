@@ -83,7 +83,7 @@ _joint_index_to_ros_name = {
 
 class RobotState(Node):
     def __init__(self):
-        super().__init__('RobotState')
+        super().__init__('robot_state')
 
         self.declare_parameter('use_robot', True)
         self.declare_parameter('interface', 'eth0')

@@ -7,13 +7,16 @@ import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
 from rclpy.time import Time
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Point
+from visualization_msgs.msg import Marker
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, ColorRGBA
 from tf2_ros import Buffer, TransformListener
 from tf2_geometry_msgs import do_transform_pose
 import pinocchio as pin
 from pinocchio import SE3
+
+
 
 from g1pilot.utils.joints_names import (
     JOINT_NAMES_ROS,
@@ -25,7 +28,7 @@ from g1pilot.utils.joints_names import (
 from g1pilot.utils.ik_solver import G1IKSolver
 
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import (LowCmd_ as hg_LowCmd, LowState_ as hg_LowState)
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_ , LowState_ 
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.utils.crc import CRC
 
@@ -37,6 +40,31 @@ from g1pilot.utils.common import (
     G1_29_JointIndex,
     DataBuffer,
 )
+
+WORKSPACE = {
+    "frame": 'pelvis',
+    "left_arm": {
+        "left_bottom_front": [0.33, 0.24, 0.02],
+        "right_bottom_front": [0.33, 0.07,  0.02],
+        "left_bottom_back":   [0.16, 0.24,  0.02],
+        "right_bottom_back":  [0.16, 0.07,  0.02],
+        "right_top_back":    [0.07, 0.20,  0.20],
+        "left_top_back":     [0.07, 0.47,  0.20],
+        "right_top_front":  [0.45, 0.11,  0.20],
+        "left_top_front":   [0.41, 0.30,  0.20],
+    },
+
+    "right_arm": {
+        "left_bottom_front": [0.33, -0.24, 0.02],
+        "right_bottom_front": [0.33, -0.07,  0.02],
+        "left_bottom_back":   [0.16, -0.24,  0.02],
+        "right_bottom_back":  [0.16, -0.07,  0.02],
+        "right_top_back":    [0.07, -0.20,  0.20],
+        "left_top_back":     [0.07, -0.47,  0.20],
+        "right_top_front":  [0.45, -0.11,  0.20],
+        "left_top_front":   [0.41, -0.30,  0.20],
+    },
+}
 
 
 def _yaw_from_R(R: np.ndarray) -> float:
@@ -110,7 +138,7 @@ class ArmController(Node):
 
         self.declare_parameter("use_robot", True)
         self.declare_parameter("interface", "eth0")
-        self.declare_parameter("arm_velocity_limit", 2.0)
+        self.declare_parameter("arm_velocity_limit", 8.0)
         self.declare_parameter("rate_hz", 250.0)
         self.declare_parameter("ik_world_frame", "pelvis")
         self.declare_parameter("ik_alpha", 0.2)
@@ -165,6 +193,7 @@ class ArmController(Node):
         self._goal_left_filt = None
         self._goal_right_filt = None
         self._reset_after_home = False
+        self._initialized = False
 
         self._T_off_right_static = self._mk_static_T(self._ee_off_right_xyz, self._ee_off_right_rpy_deg)
         self._T_off_left_static = self._mk_static_T(self._ee_off_left_xyz, self._ee_off_left_rpy_deg)
@@ -183,10 +212,13 @@ class ArmController(Node):
         self.home_right = np.array([0.90, -0.06, 0.04, -0.78, -0.07, -0.11, -0.30], dtype=float)
         self.home_left  = np.array([0.90, -0.06, 0.04, -0.78, -0.07, -0.11, -0.30], dtype=float)
 
+        self.left_workspace_publisher = self.create_publisher(Marker, '/g1pilot/workspace/left', 10)
+        self.right_workspace_publisher = self.create_publisher(Marker, '/g1pilot/workspace/right', 10)
+
         if not self.use_robot:
             self.joint_pub = self.create_publisher(JointState, "/joint_states", 10)
-        self.create_subscription(PoseStamped, "/g1pilot/right_hand_goal", self._right_goal_callback, 10)
-        self.create_subscription(PoseStamped, "/g1pilot/left_hand_goal", self._left_goal_callback, 10)
+        self.create_subscription(PoseStamped, "/g1pilot/hand_goal/right", self._right_goal_callback, 10)
+        self.create_subscription(PoseStamped, "/g1pilot/hand_goal/left", self._left_goal_callback, 10)
         self.create_subscription(Bool, "/g1pilot/arms_controlled", self._arms_controlled_callback, 10)
         self.create_subscription(Bool, "/g1pilot/homming_arms", self._homming_callback, 10)
 
@@ -438,13 +470,13 @@ class ArmController(Node):
 
         ChannelFactoryInitialize(0, self.interface)
 
-        self.lowstate_subscriber = ChannelSubscriber('rt/lowstate', hg_LowState)
+        self.lowstate_subscriber = ChannelSubscriber('rt/lowstate', LowState_)
         self.lowstate_subscriber.Init()
 
         self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state, daemon=True)
         self.subscribe_thread.start()
 
-        self.lowcmd_publisher = ChannelPublisher('rt/arm_sdk', hg_LowCmd)
+        self.lowcmd_publisher = ChannelPublisher('rt/arm_sdk', LowCmd_)
         self.lowcmd_publisher.Init()
 
         while not self.lowstate_buffer.GetData():
@@ -474,6 +506,7 @@ class ArmController(Node):
 
         self.q_target = np.zeros(14)
         self.tauff_target = np.zeros(14)
+        self._initialized = True
 
     def _subscribe_motor_state(self):
         """
@@ -768,6 +801,50 @@ class ArmController(Node):
             dt = max(1e-4, min(0.1, now - self._last_tick_time))
         self._last_tick_time = now
         return dt
+    
+    def _publish_workspace(self, arm):
+        marker = Marker()
+        marker.header.frame_id = WORKSPACE["frame"]
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "workspace"
+        marker.id = 0
+        marker.type = Marker.LINE_LIST
+        marker.action = Marker.ADD
+        marker.scale.x = 0.005  
+        marker.color = ColorRGBA(r=0.1, g=1.0, b=0.3, a=0.9)
+
+        points = WORKSPACE[arm]
+
+        pts = {k: Point(x=v[0], y=v[1], z=v[2]) for k, v in points.items()}
+
+        edges = [
+            # Bottom rectangle
+            ("left_bottom_front", "right_bottom_front"),
+            ("right_bottom_front", "right_bottom_back"),
+            ("right_bottom_back", "left_bottom_back"),
+            ("left_bottom_back", "left_bottom_front"),
+
+            # Top rectangle
+            ("left_top_front", "right_top_front"),
+            ("right_top_front", "right_top_back"),
+            ("right_top_back", "left_top_back"),
+            ("left_top_back", "left_top_front"),
+
+            # Vertical edges
+            ("left_bottom_front", "left_top_front"),
+            ("right_bottom_front", "right_top_front"),
+            ("left_bottom_back", "left_top_back"),
+            ("right_bottom_back", "right_top_back"),
+        ]
+
+        for a, b in edges:
+            marker.points.append(pts[a])
+            marker.points.append(pts[b])
+
+        if arm == "left_arm":
+            self.left_workspace_publisher.publish(marker)
+        else:
+            self.right_workspace_publisher.publish(marker)
 
     def main_loop(self):
         """
@@ -788,6 +865,12 @@ class ArmController(Node):
         - It automatically synchronizes the IK goals when returning to home.
         """
 
+        self._publish_workspace("left_arm")
+        self._publish_workspace("right_arm")
+
+        if not getattr(self, "_initialized", False):
+            return
+        
         if self.use_robot:
             robot_data = self.lowstate_subscriber.Read()
             if robot_data is not None:

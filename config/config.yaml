@@ -40,6 +40,27 @@ home:
     motor_6: -0.11401312798261642
     motor_7: -0.29750025272369385
 
+workspace:
+  frame: pelvis
+  left_arm:
+    left_bottom_front: [0.33, 0.24, 0.02]
+    right_bottom_front: [0.33, 0.07,  0.02]
+    left_bottom_back:   [0.16, 0.24,  0.02]
+    right_bottom_back:  [0.16, 0.07,  0.02]
+    right_top_back:    [0.07, 0.20,  0.20]
+    left_top_back:     [0.07, 0.47,  0.20]
+    right_top_front:  [0.45, 0.11,  0.20]
+    left_top_front:   [0.41, 0.30,  0.20]
+  right_arm:
+    left_bottom_front: [0.33, -0.24, 0.02]
+    right_bottom_front: [0.33, -0.07,  0.02]
+    left_bottom_back:   [0.16, -0.24,  0.02]
+    right_bottom_back:  [0.16, -0.07,  0.02]
+    right_top_back:    [0.07, -0.20,  0.20]
+    left_top_back:     [0.07, -0.47,  0.20]
+    right_top_front:  [0.45, -0.11,  0.20]
+    left_top_front:   [0.41, -0.30,  0.20]
+
 robot:
   model: 29dof #29dof_dex3
   left_eff_topic: /g1pilot/left_hand_goal
@@ -58,6 +79,14 @@ state:
   voice_topic: /g1pilot/voice
 
 dex3:
+  total_dofs: 7
+  right_gripper:
+    close_values: [-0.10, 0.63, -1.74, 1.06, 0.95, 0.91, 1.22]
+    open_values: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  left_values:
+    close_values: [0.04,  -0.04,  1.51, -1.10, -1.47, -1.13, -1.23]
+    open_values: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  send_commands: true
   right_cmd_topic: rt/dex3/right/cmd
   right_state_topic: rt/dex3/right/state
   right_hand_topic: /g1pilot/dx3/right/hand_action

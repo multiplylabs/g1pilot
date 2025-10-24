@@ -20,11 +20,11 @@ class InteractiveMarkerEFF(Node):
         self.declare_parameter('spawn_rate_hz', 5.0)
 
         self.declare_parameter('right_tf_frame', 'right_hand_point_contact')
-        self.declare_parameter('right_topic', '/g1pilot/right_hand_goal')
+        self.declare_parameter('right_topic', '/g1pilot/hand_goal/right')
         self.declare_parameter('right_scale', 0.05)
 
         self.declare_parameter('left_tf_frame', 'left_hand_point_contact')
-        self.declare_parameter('left_topic', '/g1pilot/left_hand_goal')
+        self.declare_parameter('left_topic', '/g1pilot/hand_goal/left')
         self.declare_parameter('left_scale', 0.05)
 
         self.declare_parameter('publish_enabled_default', False)

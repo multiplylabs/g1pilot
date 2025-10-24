@@ -25,6 +25,8 @@ setup(
             'launch/navigation_launcher.launch.py',
             'launch/mola_launcher.launch.py',
             'launch/livox_launcher.launch.py',
+
+            'launch/bringup.launch.py',
         ]),
 
         # URDF / XML
@@ -38,6 +40,10 @@ setup(
          expand([
             'description_files/meshes/**/*.STL',
          ])),
+
+        # Configuration Files
+        (f'share/{package_name}/config',
+            expand(['config/*.yaml'])),
 
         # RViz
         (f'share/{package_name}/rviz', expand(['rviz/*.rviz'])),

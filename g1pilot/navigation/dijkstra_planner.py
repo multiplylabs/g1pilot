@@ -39,9 +39,9 @@ def _catmull_rom_centripetal(points, samples_per_seg=8, closed=False):
             if not out or _dist(out[-1],p2)>1e-6: out.append(p2)
     return out
 
-class DijkstraPlannerSmooth(Node):
+class DijkstraPlanner(Node):
     def __init__(self):
-        super().__init__('dijkstra_planner_smooth_oriented')
+        super().__init__('dijkstra_planner')
         self.declare_parameter('map_topic','/map')
         self.declare_parameter('odom_topic','/lidar_odometry/pose_fixed')
         self.declare_parameter('goal_topic','/g1pilot/goal')
@@ -246,7 +246,7 @@ class DijkstraPlannerSmooth(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node=DijkstraPlannerSmooth()
+    node=DijkstraPlanner()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

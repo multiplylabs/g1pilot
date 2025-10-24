@@ -36,9 +36,9 @@ def quat_normalize(q):
     n = math.sqrt(x * x + y * y + z * z + w * w)
     return (0.0, 0.0, 0.0, 1.0) if n == 0.0 else (x / n, y / n, z / n, w / n)
 
-class MolaTFBridgeReoriented(Node):
+class FixMolaOdometry(Node):
     def __init__(self):
-        super().__init__('mola_tf_bridge_reoriented')
+        super().__init__('fix_mola_odometry')
 
         self.declare_parameter('in_topic', '/lidar_odometry/pose')
         self.declare_parameter('out_topic', '/lidar_odometry/pose_fixed')
@@ -108,7 +108,7 @@ class MolaTFBridgeReoriented(Node):
 
 def main():
     rclpy.init()
-    node = MolaTFBridgeReoriented()
+    node = FixMolaOdometry()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
