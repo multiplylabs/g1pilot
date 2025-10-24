@@ -59,7 +59,7 @@ class DijkstraPlanner(Node):
         qos=QoSProfile(depth=10)
         self.sub_map=self.create_subscription(OccupancyGrid,self.get_parameter('map_topic').value,self.cb_map,qos)
         self.sub_odom=self.create_subscription(Odometry,self.get_parameter('odom_topic').value,self.cb_odom,qos)
-        self.sub_goal=self.create_subscription(PointStamped,self.get_parameter('goal_topic').value,self.cb_goal,qos)
+        self.sub_goal=self.create_subscription(PoseStamped,self.get_parameter('goal_topic').value,self.cb_goal,qos)
         self.pub_path=self.create_publisher(Path,self.get_parameter('path_topic').value,qos)
         self.map=None
         self.map_frame='map'
@@ -95,7 +95,7 @@ class DijkstraPlanner(Node):
         if not self.have_pose:
             self.get_logger().warn("No odom pose yet.")
             return
-        gx=float(msg.point.x); gy=float(msg.point.y)
+        gx=float(msg.pose.position.x); gy=float(msg.pose.position.y)
         if self.map is None:
             self.publish_path(self.line_points(self.px,self.py,gx,gy,msg.header.frame_id or 'map'),msg.header.frame_id or 'map')
             return
