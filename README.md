@@ -84,6 +84,11 @@ To run the docker image in the robot with the following command:
 - **arm_controller**: Node to control the upper body of the robot, providing joint and cartesian control modes for the arms.
 
 ## Usage
+
+### Configuration File
+The configuration file is located in the `config` folder. You can modify the parameters according to your needs. It's important to set up all the correct information for your robot.
+
+### Instructions
 Once you have the docker image running, you can run the following command to start the unitree node:
 
 ```bash
@@ -95,34 +100,48 @@ Then, source the workspace:
 ```bash
 source install/setup.bash
 ```
-To visualize the real robot in RViz, you can run the following command:
+
+You can launch the bringup robot with the following command:
 
 ```bash
-ros2 launch g1pilot rviz_launcher.launch.py
+ros2 launch g1pilot bringup_launcher.launch.py
 ```
+
+Or you can run each node separately according to your needs.
+
+1.- To run the Livox LiDAR, you can run the following command:
 
 ```bash
-ros2 launch g1pilot robot_state_launcher.launch.py
+ros2 launch g1pilot livox_launcher.launch.py
 ```
 
-To teleoperate the robot using the joystick, you can run the following command:
+2.- To run the mola odometry, you can run the following command:
+
 ```bash
-ros2 launch g1pilot teleoperation_launcher.launch.py
+ros2 launch g1pilot mola_launcher.launch.py
 ```
 
-To apply autonomous navigation, you can run the following command:
+3.- To run the navigation stack and enable the locomotion of the robot, you can run the following command:
+
 ```bash
 ros2 launch g1pilot navigation_launcher.launch.py
 ```
 
-  To run the depth camera on the robot, you can run the following command:
+4.- To run the manipulation stack, you can run the following command:
+
 ```bash
-ros2 launch realsense2_camera rs_launch.py depth_module.depth_profile:=1280x720x30 pointcloud.enable:=true
+ros2 launch g1pilot manipulation_launcher.launch.py
 ```
 
-To run the MOLA Odometry, you can run the following command:
+5.- To run the teleoperation stack, you can run the following command:
+
 ```bash
-ros2 launch g1pilot mola_launcher.launch.py
+ros2 launch g1pilot teleoperation_launcher.launch.py
+```
+
+6.- You can run the depth camera on the robot with the following command:
+```bash
+ros2 launch realsense2_camera rs_launch.py depth_module.depth_profile:=1280x720x30 pointcloud.enable:=true
 ```
 
 ## Entrypoints

@@ -11,6 +11,13 @@ general:
   use_mola: true
   use_livox: true
 
+nodes:
+  livox_launcher_enabled: true
+  mola_launcher_enabled: true
+  navigation_launcher_enabled: true
+  robot_state_launcher_enabled: true
+  teleoperation_launcher_enabled: true
+
 inverse_kinematics:
   alpha: 0.2
   max_dq_step: 0.05

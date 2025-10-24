@@ -11,6 +11,7 @@ def generate_launch_description():
     navigation_launcher = os.path.join(pkg1_share, 'launch', 'navigation_launcher.launch.py')
     robot_state_launcher = os.path.join(pkg1_share, 'launch', 'robot_state_launcher.launch.py')
     teleoperation_launcher = os.path.join(pkg1_share, 'launch', 'teleoperation_launcher.launch.py')
+    manipulation_launcher = os.path.join(pkg1_share, 'launch', 'manipulation_launcher.launch.py')
 
 
     return LaunchDescription([
@@ -25,5 +26,8 @@ def generate_launch_description():
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(teleoperation_launcher)
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(manipulation_launcher)
         ),
     ])

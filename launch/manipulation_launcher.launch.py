@@ -26,25 +26,8 @@ def generate_launch_description():
 
         Node(
             package='g1pilot',
-            executable='loco_client',
-            name='loco_client',
-            parameters=[{
-                'interface': interface,
-                'use_robot': ParameterValue(use_robot, value_type=bool),
-                'arm_controlled': arm_controlled,  # string ('left'|'right'|'both')
-                'enable_arm_ui': ParameterValue(enable_arm_ui, value_type=bool),
-                'ik_use_waist': ParameterValue(ik_use_waist, value_type=bool),
-                'ik_alpha': ParameterValue(ik_alpha, value_type=float),
-                'ik_max_dq_step': ParameterValue(ik_max_dq_step, value_type=float),
-                'arm_velocity_limit': ParameterValue(arm_velocity_limit, value_type=float),
-            }],
-            output='screen'
-        ),
-
-        Node(
-            package='g1pilot',
-            executable='nav2point',
-            name='nav2point',
+            executable='arm_controller',
+            name='arm_controller',
             parameters=[{
                 'interface': interface,
                 'use_robot': ParameterValue(use_robot, value_type=bool),
@@ -54,8 +37,19 @@ def generate_launch_description():
 
         Node(
             package='g1pilot',
-            executable='dijkstra_planner',
-            name='dijkstra_planner',
+            executable='dx3_controller',
+            name='dx3_controller',
+            parameters=[{
+                'arm_controlled': ParameterValue(LaunchConfiguration("arm_controlled"), value_type=str),
+                'interface': ParameterValue(LaunchConfiguration("interface"), value_type=str)
+            }],
+            output='screen'
+        ),
+
+        Node(
+            package='g1pilot',
+            executable='interactive_marker',
+            name='interactive_marker',
             parameters=[{
                 'interface': interface,
                 'use_robot': ParameterValue(use_robot, value_type=bool),

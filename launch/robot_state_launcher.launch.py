@@ -60,17 +60,6 @@ def generate_launch_description():
         ),
 
         Node(
-            package='g1pilot',
-            executable='dx3_controller',
-            name='dx3_controller',
-            parameters=[{
-                'arm_controlled': ParameterValue(LaunchConfiguration("arm_controlled"), value_type=str),
-                'interface': ParameterValue(LaunchConfiguration("interface"), value_type=str)
-            }],
-            output='screen'
-        ),
-
-        Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='mid360_to_livox_tf',
