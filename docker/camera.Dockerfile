@@ -26,6 +26,10 @@ RUN apt install ros-${ROS_DISTRO}-rosidl-default-generators -y
 WORKDIR /ros2_ws/src
 RUN apt install ros-${ROS_DISTRO}-rmw-cyclonedds-cpp -y
 
+RUN apt-get update && apt-get install -y \
+    libxinerama-dev libxcursor-dev libxrandr-dev libxi-dev libglfw3-dev \
+    libglu1-mesa-dev freeglut3-dev mesa-common-dev
+
 RUN pip install --upgrade pyrealsense2 numpy opencv-python
 WORKDIR /
 RUN git clone https://github.com/IntelRealSense/librealsense.git
